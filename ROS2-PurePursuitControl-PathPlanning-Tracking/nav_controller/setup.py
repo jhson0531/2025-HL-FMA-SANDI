@@ -21,10 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
         	'control = nav_controller.control:main',
-        	'utm_path_launcher = nav_controller.utm_path_launcher:main',
-        	'utm_path_generator = nav_controller.utm_path_generator:main',
-        	'utm_path_controller = nav_controller.utm_path_controller:main',
-        	'utm_path_with_gps = nav_controller.utm_path_with_gps:main'
+        	'utm_pure_pursuit = nav_controller.utm_pure_pursuit:main'
         ],
     },
 )

@@ -129,8 +129,8 @@ class UTMPathLauncher(Node):
         
         # 로봇 초기 위치를 첫 번째 waypoint에서 약간 떨어진 곳으로 설정
         # (실제 환경에서는 GPS에서 받아온 UTM 좌표 사용)
-        self.robot_initial_utm_x = first_utm_x - 5.0  # 5미터 앞
-        self.robot_initial_utm_y = first_utm_y - 2.0  # 2미터 왼쪽
+        self.robot_initial_utm_x = first_utm_x - 15.0  # 15미터 앞 (더 멀리)
+        self.robot_initial_utm_y = first_utm_y - 8.0   # 8미터 왼쪽 (더 멀리)
         
         # UTM 좌표를 로봇 초기 위치 기준 로컬 좌표로 변환
         self.local_waypoints = []

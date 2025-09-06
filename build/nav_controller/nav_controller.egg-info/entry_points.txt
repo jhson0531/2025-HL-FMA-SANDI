@@ -1,0 +1,8 @@
+[console_scripts]
+control = nav_controller.control:main
+utm_path_controller = nav_controller.utm_path_controller:main
+utm_path_generator = nav_controller.utm_path_generator:main
+utm_path_launcher = nav_controller.utm_path_launcher:main
+utm_path_test = nav_controller.utm_path_test:main
+utm_path_with_gps = nav_controller.utm_path_with_gps:main
+

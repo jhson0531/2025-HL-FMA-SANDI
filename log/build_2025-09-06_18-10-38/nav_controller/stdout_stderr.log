@@ -1,0 +1,55 @@
+running egg_info
+creating ../../build/nav_controller/nav_controller.egg-info
+writing ../../build/nav_controller/nav_controller.egg-info/PKG-INFO
+writing dependency_links to ../../build/nav_controller/nav_controller.egg-info/dependency_links.txt
+writing entry points to ../../build/nav_controller/nav_controller.egg-info/entry_points.txt
+writing requirements to ../../build/nav_controller/nav_controller.egg-info/requires.txt
+writing top-level names to ../../build/nav_controller/nav_controller.egg-info/top_level.txt
+writing manifest file '../../build/nav_controller/nav_controller.egg-info/SOURCES.txt'
+reading manifest file '../../build/nav_controller/nav_controller.egg-info/SOURCES.txt'
+writing manifest file '../../build/nav_controller/nav_controller.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/jh/ros2_workspace/src/build/nav_controller/build
+creating /home/jh/ros2_workspace/src/build/nav_controller/build/lib
+creating /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/utm_path_with_gps.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/__init__.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/control.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/utm_path_generator.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/utm_path_launcher.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/utm_path_controller.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+copying nav_controller/utm_path_test.py -> /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller
+running install
+running install_lib
+creating /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/utm_path_with_gps.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/__init__.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/control.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/utm_path_generator.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/utm_path_launcher.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/utm_path_controller.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+copying /home/jh/ros2_workspace/src/build/nav_controller/build/lib/nav_controller/utm_path_test.py -> /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/utm_path_with_gps.py to utm_path_with_gps.cpython-310.pyc
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/__init__.py to __init__.cpython-310.pyc
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/control.py to control.cpython-310.pyc
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/utm_path_generator.py to utm_path_generator.cpython-310.pyc
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/utm_path_launcher.py to utm_path_launcher.cpython-310.pyc
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/utm_path_controller.py to utm_path_controller.cpython-310.pyc
+byte-compiling /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller/utm_path_test.py to utm_path_test.cpython-310.pyc
+running install_data
+creating /home/jh/ros2_workspace/src/install/nav_controller/share/ament_index
+creating /home/jh/ros2_workspace/src/install/nav_controller/share/ament_index/resource_index
+creating /home/jh/ros2_workspace/src/install/nav_controller/share/ament_index/resource_index/packages
+copying resource/nav_controller -> /home/jh/ros2_workspace/src/install/nav_controller/share/ament_index/resource_index/packages
+copying package.xml -> /home/jh/ros2_workspace/src/install/nav_controller/share/nav_controller
+running install_egg_info
+Copying ../../build/nav_controller/nav_controller.egg-info to /home/jh/ros2_workspace/src/install/nav_controller/lib/python3.10/site-packages/nav_controller-0.0.0-py3.10.egg-info
+running install_scripts
+Installing control script to /home/jh/ros2_workspace/src/install/nav_controller/lib/nav_controller
+Installing utm_path_controller script to /home/jh/ros2_workspace/src/install/nav_controller/lib/nav_controller
+Installing utm_path_generator script to /home/jh/ros2_workspace/src/install/nav_controller/lib/nav_controller
+Installing utm_path_launcher script to /home/jh/ros2_workspace/src/install/nav_controller/lib/nav_controller
+Installing utm_path_test script to /home/jh/ros2_workspace/src/install/nav_controller/lib/nav_controller
+Installing utm_path_with_gps script to /home/jh/ros2_workspace/src/install/nav_controller/lib/nav_controller
+writing list of installed files to '/home/jh/ros2_workspace/src/build/nav_controller/install.log'
