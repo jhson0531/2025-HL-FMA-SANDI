@@ -29,13 +29,10 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <gtest/gtest.h>
-
 #include <vector>
 
-#include <rclcpp/rclcpp.hpp>
-
+#include "gtest/gtest.h"
+#include "rclcpp/rclcpp.hpp"
 #include "robot_localization/robot_localization_estimator.hpp"
 
 TEST(RLETest, StateBuffer)

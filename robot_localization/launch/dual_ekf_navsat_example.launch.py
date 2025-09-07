@@ -50,26 +50,14 @@ def generate_launch_description():
             parameters=[parameters_file_path],
             remappings=[('odometry/filtered', 'odometry/global')]
            ),           
-    # Static transform: base_link -> gps
-    # GPS 센서의 실제 위치에 맞게 offset 조정 필요
-    # arguments: [x, y, z, roll, pitch, yaw, parent_frame, child_frame]
     launch_ros.actions.Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_link_to_gps',
-        arguments=['--x', '0.0', '--y', '0.0', '--z', '0.0',
-                   '--roll', '0.0', '--pitch', '0.0', '--yaw', '0.0',
-                   '--frame-id', 'base_link', '--child-frame-id', 'gps']
-    ),
-
-    launch_ros.actions.Node(
-            package='robot_localization',
-            executable='navsat_transform_node',
+            package='robot_localization', 
+            executable='navsat_transform_node', 
             name='navsat_transform',
 	        output='screen',
             parameters=[parameters_file_path],
-            remappings=[('imu/data', 'imu/data'),
-                        ('gps/fix', 'ublox_gps_node/fix'),
+            remappings=[('imu', 'imu/data'),
+                        ('gps/fix', 'gps/fix'), 
                         ('gps/filtered', 'gps/filtered'),
                         ('odometry/gps', 'odometry/gps'),
                         ('odometry/filtered', 'odometry/global')]           

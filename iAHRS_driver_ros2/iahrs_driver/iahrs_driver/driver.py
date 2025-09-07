@@ -118,7 +118,7 @@ class IahrsDriver(Node):
                     self._msg.orientation.z = q[3]
 
                     self._msg.header.stamp = self.get_clock().now().to_msg()
-                    self._msg.header.frame_id = self._tf_prefix + "/imu_link"
+                    self._msg.header.frame_id = self._tf_prefix + "imu_link"
                     self._imu_pub_handler.publish(self._msg)
                     if self._is_send_tf is True:
                         self._send_tf()
@@ -145,8 +145,8 @@ class IahrsDriver(Node):
         br = tf2_ros.TransformBroadcaster(self)
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = self._tf_prefix + "/base_link"
-        t.child_frame_id = self._tf_prefix + "/imu_link"
+        t.header.frame_id = self._tf_prefix + "base_link"
+        t.child_frame_id = self._tf_prefix + "imu_link"
         t.transform.rotation.x = self._msg.orientation.x
         t.transform.rotation.y = self._msg.orientation.y
         t.transform.rotation.z = self._msg.orientation.z
