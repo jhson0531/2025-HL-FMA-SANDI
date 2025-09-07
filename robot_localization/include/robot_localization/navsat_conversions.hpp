@@ -36,8 +36,9 @@
 * https://github.com/austin-robot/utexas-art-ros-pkg/blob/afd147a1eb944fc3dbd138574c39699813f797bf/stacks/art_vehicle/art_common/include/art/UTM.h
 * https://github.com/austin-robot/utexas-art-ros-pkg/blob/afd147a1eb944fc3dbd138574c39699813f797bf/stacks/art_vehicle/art_common/include/art/conversions.h
 */
-#ifndef NAVSAT_CONVERSIONS_HPP_
-#define NAVSAT_CONVERSIONS_HPP_
+
+#ifndef ROBOT_LOCALIZATION__NAVSAT_CONVERSIONS_HPP_
+#define ROBOT_LOCALIZATION__NAVSAT_CONVERSIONS_HPP_
 
 /**  @file
 
@@ -222,4 +223,4 @@ static inline void UTMtoLL(
 }  // namespace navsat_conversions
 }  // namespace robot_localization
 
-#endif  // NAVSAT_CONVERSIONS_HPP_
+#endif  // ROBOT_LOCALIZATION__NAVSAT_CONVERSIONS_HPP_

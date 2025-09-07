@@ -29,12 +29,14 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <functional>
-#include <memory>
-#include <string>
 
-#include "Eigen/Dense"
-#include "rclcpp/rclcpp.hpp"
+#include <Eigen/Dense>
+#include <functional>
+#include <string>
+#include <memory>
+
+#include <rclcpp/rclcpp.hpp>
+
 #include "robot_localization/ros_robot_localization_listener.hpp"
 #include "robot_localization/srv/get_state.hpp"
 

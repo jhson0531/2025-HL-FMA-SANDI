@@ -30,17 +30,20 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <memory>
 
-#include "rclcpp/rclcpp.hpp"
-#include "robot_localization/ros_filter_types.hpp"
+#include <algorithm>
+#include <string>
+#include <memory>
+#include <vector>
+
+#include <robot_localization/ros_filter_types.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   rclcpp::NodeOptions options;
   options.arguments({"ekf_filter_node"});
-  options.clock_type(RCL_ROS_TIME);
   std::shared_ptr<robot_localization::RosEkf> filter =
     std::make_shared<robot_localization::RosEkf>(options);
   filter->initialize();

@@ -29,17 +29,17 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <memory>
 
-#include "rclcpp/rclcpp.hpp"
-#include "robot_localization/navsat_transform.hpp"
+#include <rclcpp/rclcpp.hpp>
+#include <robot_localization/navsat_transform.hpp>
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
-  rclcpp::NodeOptions options;
-  options.clock_type(RCL_ROS_TIME);
+  const rclcpp::NodeOptions options;
   auto navsat_transform_node = std::make_shared<robot_localization::NavSatTransform>(options);
 
   rclcpp::spin(navsat_transform_node->get_node_base_interface());

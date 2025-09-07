@@ -29,34 +29,27 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "robot_localization/navsat_transform.hpp"
 
-#include <chrono>
-#include <functional>
-#include <memory>
+#include <Eigen/Dense>
+#include <iostream>
 #include <string>
 #include <vector>
+#include <memory>
+#include <utility>
 
-#include "angles/angles.h"
-#include "Eigen/Dense"
-#include "nav_msgs/msg/odometry.hpp"
-#include "rclcpp/qos.hpp"
-#include "rclcpp/rclcpp.hpp"
-#include "robot_localization/filter_common.hpp"
-#include "navsat_conversions.hpp"
-#include "robot_localization/ros_filter_utilities.hpp"
-#include "robot_localization/srv/from_ll.hpp"
-#include "robot_localization/srv/set_datum.hpp"
-#include "robot_localization/srv/to_ll.hpp"
-#include "sensor_msgs/msg/imu.hpp"
-#include "sensor_msgs/msg/nav_sat_fix.hpp"
-#include "tf2/LinearMath/Matrix3x3.hpp"
-#include "tf2/LinearMath/Quaternion.hpp"
-#include "tf2/LinearMath/Transform.hpp"
-#include "tf2/LinearMath/Vector3.hpp"
-#include <tf2_ros/buffer.hpp>
-#include <tf2_ros/transform_listener.hpp>
-#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include <robot_localization/filter_common.hpp>
+#include <robot_localization/filter_utilities.hpp>
+#include <robot_localization/navsat_conversions.hpp>
+#include <robot_localization/navsat_transform.hpp>
+#include <robot_localization/ros_filter_utilities.hpp>
+
+#include <GeographicLib/Geocentric.hpp>
+#include <GeographicLib/LocalCartesian.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/nav_sat_fix.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -70,25 +63,21 @@ NavSatTransform::NavSatTransform(const rclcpp::NodeOptions & options)
   broadcast_cartesian_transform_(false),
   broadcast_cartesian_transform_as_parent_frame_(false),
   gps_frame_id_(""),
-  gps_update_time_(0, 0, RCL_ROS_TIME),
   gps_updated_(false),
   has_transform_gps_(false),
   has_transform_imu_(false),
   has_transform_odom_(false),
   magnetic_declination_(0.0),
-  odom_update_time_(0, 0, RCL_ROS_TIME),
   odom_updated_(false),
   publish_gps_(false),
   transform_good_(false),
   transform_timeout_(0ns),
   use_local_cartesian_(false),
-  force_user_utm_(false),
   use_manual_datum_(false),
   use_odometry_yaw_(false),
   cartesian_broadcaster_(*this),
   utm_meridian_convergence_(0.0),
-  utm_zone_(0),
-  northp_(true),
+  utm_zone_(""),
   world_frame_id_("odom"),
   yaw_offset_(0.0),
   zero_altitude_(false)
@@ -145,11 +134,6 @@ NavSatTransform::NavSatTransform(const rclcpp::NodeOptions & options)
       broadcast_cartesian_transform_as_parent_frame_);
   }
 
-  if (!this->get_clock()->started()) {
-    RCLCPP_INFO(this->get_logger(), "Waiting for clock to start...");
-    this->get_clock()->wait_until_started();
-  }
-
   parameters_callback_handle_ = this->add_on_set_parameters_callback(
     std::bind(&NavSatTransform::parametersCallback, this, std::placeholders::_1));
 
@@ -160,11 +144,6 @@ NavSatTransform::NavSatTransform(const rclcpp::NodeOptions & options)
     "toLL", std::bind(&NavSatTransform::toLLCallback, this, _1, _2));
   from_ll_srv_ = this->create_service<robot_localization::srv::FromLL>(
     "fromLL", std::bind(&NavSatTransform::fromLLCallback, this, _1, _2));
-  from_ll_array_srv_ = this->create_service<robot_localization::srv::FromLLArray>(
-    "fromLLArray", std::bind(&NavSatTransform::fromLLArrayCallback, this, _1, _2));
-
-  set_utm_zone_srv_ = this->create_service<robot_localization::srv::SetUTMZone>(
-    "setUTMZone", std::bind(&NavSatTransform::setUTMZoneCallback, this, _1, _2));
 
   std::vector<double> datum_vals;
   if (use_manual_datum_) {
@@ -223,13 +202,10 @@ NavSatTransform::NavSatTransform(const rclcpp::NodeOptions & options)
 
   // Sleep for the parameterized amount of time, to give
   // other nodes time to start up (not always necessary)
-  if (delay > 0) {
-    RCLCPP_INFO_STREAM(this->get_logger(),
-        "Delaying for " << delay << " seconds before starting...");
-    rclcpp::Duration delay_duration = rclcpp::Duration::from_seconds(delay);
-    this->get_clock()->sleep_for(delay_duration);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Delay elapsed. Continuing.");
-  }
+  rclcpp::sleep_for(
+    std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::duration<double>(
+        delay)));
 
   auto interval = std::chrono::duration<double>(1.0 / frequency);
   timer_ = this->create_wall_timer(interval, std::bind(&NavSatTransform::transformCallback, this));
@@ -277,7 +253,7 @@ void NavSatTransform::computeTransform()
     if (!use_manual_datum_) {
       getRobotOriginCartesianPose(
         transform_cartesian_pose_, transform_cartesian_pose_corrected,
-        rclcpp::Time(0, 0, RCL_ROS_TIME));
+        rclcpp::Time(0));
     } else {
       transform_cartesian_pose_corrected = transform_cartesian_pose_;
     }
@@ -434,6 +410,8 @@ bool NavSatTransform::toLLCallback(
   if (!transform_good_) {
     return false;
   }
+  // tf2::Vector3 point;
+  // tf2::fromMsg(request.map_point, point);
   tf2::Vector3 point(request->map_point.x, request->map_point.y,
     request->map_point.z);
   mapToLL(
@@ -447,40 +425,9 @@ bool NavSatTransform::fromLLCallback(
   const std::shared_ptr<robot_localization::srv::FromLL::Request> request,
   std::shared_ptr<robot_localization::srv::FromLL::Response> response)
 {
-  try {
-    response->map_point = fromLL(request->ll_point);
-  } catch(const std::runtime_error & e) {
-    return false;
-  }
-
-  return true;
-}
-
-bool NavSatTransform::fromLLArrayCallback(
-  const std::shared_ptr<robot_localization::srv::FromLLArray::Request> request,
-  std::shared_ptr<robot_localization::srv::FromLLArray::Response> response)
-{
-  decltype(response->map_points) converted_points;
-  converted_points.reserve(request->ll_points.size());
-
-  try {
-    std::transform(request->ll_points.begin(), request->ll_points.end(),
-                   std::back_inserter(converted_points),
-      [this] (const auto & point) {return fromLL(point);});
-  } catch(const std::runtime_error & e) {
-    return false;
-  }
-
-  response->map_points = std::move(converted_points);
-  return true;
-}
-
-geometry_msgs::msg::Point NavSatTransform::fromLL(
-  const geographic_msgs::msg::GeoPoint & geo_point)
-{
-  double altitude = geo_point.altitude;
-  double longitude = geo_point.longitude;
-  double latitude = geo_point.latitude;
+  double altitude = request->ll_point.altitude;
+  double longitude = request->ll_point.longitude;
+  double latitude = request->ll_point.latitude;
 
   tf2::Transform cartesian_pose;
 
@@ -497,45 +444,25 @@ geometry_msgs::msg::Point NavSatTransform::fromLL(
       cartesian_y,
       cartesian_z);
   } else {
-    // Transform to UTM using the fixed utm_zone_
-    int zone_tmp;
-    bool northp_tmp;
-
-    try {
-      GeographicLib::UTMUPS::Forward(
-        latitude, longitude,
-        zone_tmp, northp_tmp, cartesian_x, cartesian_y, utm_zone_);
-    } catch (GeographicLib::GeographicErr const & e) {
-      RCLCPP_ERROR_STREAM(this->get_logger(), e.what());
-      throw;
-    }
+    std::string utm_zone_tmp;
+    navsat_conversions::LLtoUTM(
+      latitude,
+      longitude,
+      cartesian_y,
+      cartesian_x,
+      utm_zone_tmp);
   }
 
   cartesian_pose.setOrigin(tf2::Vector3(cartesian_x, cartesian_y, altitude));
 
+  nav_msgs::msg::Odometry gps_odom;
+
   if (!transform_good_) {
-    throw std::runtime_error("Invalid transform.");
+    return false;
   }
 
-  return cartesianToMap(cartesian_pose).pose.pose.position;
-}
+  response->map_point = cartesianToMap(cartesian_pose).pose.pose.position;
 
-bool NavSatTransform::setUTMZoneCallback(
-  const std::shared_ptr<robot_localization::srv::SetUTMZone::Request> request,
-  std::shared_ptr<robot_localization::srv::SetUTMZone::Response>)
-{
-  double x_unused;
-  double y_unused;
-  int prec_unused;
-  GeographicLib::MGRS::Reverse(
-    request->utm_zone, utm_zone_, northp_, x_unused, y_unused,
-    prec_unused, true);
-  // Toggle flags such that transforms get updated to user utm zone
-  force_user_utm_ = true;
-  use_manual_datum_ = false;
-  transform_good_ = false;
-  has_transform_gps_ = false;
-  RCLCPP_INFO(this->get_logger(), "UTM zone set to %d %s", utm_zone_, northp_ ? "north" : "south");
   return true;
 }
 
@@ -578,32 +505,13 @@ void NavSatTransform::mapToLL(
   odom_as_cartesian.setRotation(tf2::Quaternion::getIdentity());
 
   // Now convert the data back to lat/long and place into the message
-  if (use_local_cartesian_) {
-    double altitude_tmp = {};
-    gps_local_cartesian_.Reverse(
-      odom_as_cartesian.getOrigin().getX(),
-      odom_as_cartesian.getOrigin().getY(),
-      0.0,
-      latitude,
-      longitude,
-      altitude_tmp);
-
-    altitude = odom_as_cartesian.getOrigin().getZ();
-  } else {
-    try {
-      GeographicLib::UTMUPS::Reverse(
-        utm_zone_,
-        northp_,
-        odom_as_cartesian.getOrigin().getX(),
-        odom_as_cartesian.getOrigin().getY(),
-        latitude,
-        longitude);
-      altitude = odom_as_cartesian.getOrigin().getZ();
-    } catch (const GeographicLib::GeographicErr & e) {
-      RCLCPP_ERROR_STREAM(this->get_logger(), e.what());
-      latitude = longitude = altitude = std::numeric_limits<double>::quiet_NaN();
-    }
-  }
+  navsat_conversions::UTMtoLL(
+    odom_as_cartesian.getOrigin().getY(),
+    odom_as_cartesian.getOrigin().getX(),
+    utm_zone_,
+    latitude,
+    longitude);
+  altitude = odom_as_cartesian.getOrigin().getZ();
 }
 
 void NavSatTransform::getRobotOriginCartesianPose(
@@ -680,17 +588,15 @@ void NavSatTransform::getRobotOriginWorldPose(
       gps_offset_rotated.setRotation(tf2::Quaternion::getIdentity());
       robot_odom_pose = gps_offset_rotated.inverse() * gps_odom_pose;
     } else {
-      RCLCPP_ERROR_THROTTLE(
+      RCLCPP_ERROR(
         this->get_logger(),
-        *this->get_clock(), 5000,
         "Could not obtain %s -> %s transform. "
         "Will not remove offset of navsat device from robot's origin",
         world_frame_id_.c_str(), base_link_frame_id_.c_str());
     }
   } else {
-    RCLCPP_ERROR_THROTTLE(
+    RCLCPP_ERROR(
       this->get_logger(),
-      *this->get_clock(), 5000,
       "Could not obtain %s -> %s transform. "
       "Will not remove offset of navsat device from robot's origin.",
       base_link_frame_id_.c_str(), gps_frame_id_.c_str());
@@ -722,27 +628,15 @@ void NavSatTransform::gpsFixCallback(
       setTransformGps(msg);
     }
 
-    double cartesian_x = {};
-    double cartesian_y = {};
-    double cartesian_z = {};
-
-    if (use_local_cartesian_) {
-      gps_local_cartesian_.Forward(
-        msg->latitude, msg->longitude, msg->altitude,
-        cartesian_x, cartesian_y, cartesian_z);
-    } else {
-      int zone_tmp;
-      bool northp_tmp;
-      try {
-        GeographicLib::UTMUPS::Forward(
-          msg->latitude, msg->longitude, zone_tmp, northp_tmp,
-          cartesian_x, cartesian_y, utm_zone_);
-      } catch (GeographicLib::GeographicErr const & e) {
-        RCLCPP_ERROR_STREAM(this->get_logger(), e.what());
-        return;
-      }
-    }
-
+    double cartesian_x = 0;
+    double cartesian_y = 0;
+    std::string cartesian_zone_tmp;
+    navsat_conversions::LLtoUTM(
+      msg->latitude,
+      msg->longitude,
+      cartesian_y,
+      cartesian_x,
+      cartesian_zone_tmp);
     latest_cartesian_pose_.setOrigin(tf2::Vector3(cartesian_x, cartesian_y, msg->altitude));
     latest_cartesian_covariance_.setZero();
 
@@ -796,9 +690,9 @@ void NavSatTransform::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
       // Apply the offset (making sure to bound them), and throw them in a
       // vector
       tf2::Vector3 rpy_angles(
-        angles::normalize_angle(roll - roll_offset),
-        angles::normalize_angle(pitch - pitch_offset),
-        angles::normalize_angle(yaw - yaw_offset));
+        filter_utilities::clampRotation(roll - roll_offset),
+        filter_utilities::clampRotation(pitch - pitch_offset),
+        filter_utilities::clampRotation(yaw - yaw_offset));
 
       // Now we need to rotate the roll and pitch by the yaw offset value.
       // Imagine a case where an IMU is mounted facing sideways. In that case
@@ -903,7 +797,7 @@ bool NavSatTransform::prepareGpsOdometry(nav_msgs::msg::Odometry * gps_odom)
     tf2::Transform transformed_cartesian_robot;
     rclcpp::Time time(static_cast<double>(gps_odom->header.stamp.sec) +
       static_cast<double>(gps_odom->header.stamp.nanosec) /
-      1000000000.0, RCL_ROS_TIME);
+      1000000000.0);
     getRobotOriginWorldPose(transformed_cartesian_gps, transformed_cartesian_robot, time);
 
     // Rotate the covariance as well
@@ -965,29 +859,23 @@ void NavSatTransform::setTransformGps(
     // UTM meridian convergence is not meaningful when using local cartesian, so set it to 0.0
     utm_meridian_convergence_ = 0.0;
   } else {
-    double k_tmp;
-    double utm_meridian_convergence_degrees;
-    try {
-      // If we're using a fixed UTM zone, then we want to use the zone that the user gave us.
-      int set_zone = force_user_utm_ ? utm_zone_ : -1;
-      GeographicLib::UTMUPS::Forward(
-        msg->latitude, msg->longitude, utm_zone_, northp_,
-        cartesian_x, cartesian_y, utm_meridian_convergence_degrees, k_tmp, set_zone);
-    } catch (const GeographicLib::GeographicErr & e) {
-      RCLCPP_ERROR_STREAM(this->get_logger(), e.what());
-      return;
-    }
-    utm_meridian_convergence_ = utm_meridian_convergence_degrees *
-      navsat_conversions::RADIANS_PER_DEGREE;
+    navsat_conversions::LLtoUTM(
+      msg->latitude,
+      msg->longitude,
+      cartesian_y,
+      cartesian_x,
+      utm_zone_,
+      utm_meridian_convergence_);
+    utm_meridian_convergence_ *= navsat_conversions::RADIANS_PER_DEGREE;
   }
 
   RCLCPP_INFO(
     this->get_logger(), "Datum (latitude, longitude, altitude) is (%0.2f, %0.2f, %0.2f)",
     msg->latitude, msg->longitude, msg->altitude);
   RCLCPP_INFO(
-    this->get_logger(), "Datum %s coordinate is (%d %s, %0.2f, %0.2f)",
-    ((use_local_cartesian_) ? "Local Cartesian" : "UTM"),
-    utm_zone_, (northp_ ? "north" : "south"), cartesian_x, cartesian_y);
+    this->get_logger(), "Datum %s coordinate is (%s, %0.2f, %0.2f)",
+    ((use_local_cartesian_) ? "Local Cartesian" : "UTM"), utm_zone_.c_str(), cartesian_x,
+    cartesian_y);
 
   transform_cartesian_pose_.setOrigin(tf2::Vector3(cartesian_x, cartesian_y, msg->altitude));
   transform_cartesian_pose_.setRotation(tf2::Quaternion::getIdentity());

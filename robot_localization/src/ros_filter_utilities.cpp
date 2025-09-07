@@ -29,25 +29,27 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "robot_localization/ros_filter_utilities.hpp"
 
-#include <iomanip>
-#include <iostream>
+#include <tf2/time.h>
+#include <tf2_ros/buffer.h>
+
 #include <string>
 #include <vector>
 
-#include "Eigen/Dense"
-#include "geometry_msgs/msg/transform_stamped.hpp"
-#include "rclcpp/time.hpp"
-#include "robot_localization/filter_common.hpp"
-#include "robot_localization/filter_utilities.hpp"
-#include "tf2/LinearMath/Matrix3x3.hpp"
-#include "tf2/LinearMath/Quaternion.hpp"
-#include "tf2/LinearMath/Transform.hpp"
-#include "tf2/LinearMath/Vector3.hpp"
-#include "tf2/time.hpp"
-#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
-#include <tf2_ros/buffer.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <robot_localization/filter_common.hpp>
+#include <robot_localization/filter_utilities.hpp>
+#include <robot_localization/ros_filter_utilities.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
+#define THROTTLE(clock, duration, thing) do { \
+    static rclcpp::Time _last_output_time ## __LINE__(0, 0, (clock)->get_clock_type()); \
+    auto _now = (clock)->now(); \
+    if (_now - _last_output_time ## __LINE__ > (duration)) { \
+      _last_output_time ## __LINE__ = _now; \
+      thing; \
+    } \
+} while (0)
 
 std::ostream & operator<<(std::ostream & os, const tf2::Vector3 & vec)
 {
