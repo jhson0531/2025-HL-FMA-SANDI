@@ -102,14 +102,11 @@ class MotionPlanningNode(Node):
                 self.speed_command = self.cmd_vel_data.linear.x  # 전진/후진 속도 (m/s)
                 self.steering_command = self.cmd_vel_data.angular.z  # 조향 각속도 (rad/s)
                 
-                # 명령값 범위 제한
-                self.speed_command = max(-255, min(255, self.speed_command))
-                self.steering_command = max(1023, min(0, self.steering_command))
-                
             else:
                 # cmd_vel 데이터가 없으면 정지
                 self.steering_command = 0
                 self.speed_command = 0
+
 
         self.get_logger().info(f"steering: {self.steering_command}, " 
                                f"speed: {self.speed_command}")
