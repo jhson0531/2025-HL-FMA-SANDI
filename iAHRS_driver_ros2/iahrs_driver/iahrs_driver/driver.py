@@ -55,7 +55,7 @@ class IahrsDriver(Node):
 
         self._reset_sensor()
 
-        self._imu_pub_handler = self.create_publisher(Imu, "imu/data", 1)
+        self._imu_pub_handler = self.create_publisher(Imu, "/imu/data", 1)
         self.create_service(Set, "reset_sensor", self._reset_sensor_callback)
         self.create_service(Set, "reset_angle", self._reset_angle_callback)
         self.timer = self.create_timer(0.01, self._serial_timer)
@@ -80,7 +80,16 @@ class IahrsDriver(Node):
                 sync_data_splitted = sync_data.split(",")
                 if len(sync_data_splitted) == 9:
                     self._new_data_flag = True
+
                     try:
+                        # 변환 전에 각 항목이 유효한지 간단히 확인
+                        for item in sync_data_splitted:
+                            # 소수점이 2개 이상이거나, '-'가 맨 앞이 아닌 곳에 있으면 건너뛰기
+                            if item.count('.') > 1 or (item.count('-') > 0 and not item.startswith('-')):
+                                # self.get_logger().warn(f"Invalid data format received, skipping: {item} in {sync_data}")
+                                return # 이 메시지는 처리하지 않고 함수 종료
+
+                        # 유효성 검사를 통과한 데이터만 변환 시도
                         sync_data_splitted = list(
                             map(lambda x: float(x.replace(',', '.')), sync_data_splitted)
                         )
@@ -156,7 +165,7 @@ class IahrsDriver(Node):
     def _reset_sensor(self):
         self._write_port_timeout("za")  # 초기화
         self._set_sync_port()  # USB/Serial
-        self._set_sync_period(50)  # 주기 50ms (20hz)
+        self._set_sync_period(10)  # 주기 10ms (100hz)
         self._set_sync_data(
             self.CONF_SYNC_LIN_ACC
             | self.CONF_SYNC_ANG_VEL

@@ -95,12 +95,12 @@ def generate_launch_description():
             ])
         ),
 
-        Node(
-            package='iahrs_driver',
-            executable='driver',
-            name='iahrs_driver',
-            output='screen'
-        ),
+        # Node(
+        #     package='iahrs_driver',
+        #     executable='driver',
+        #     name='iahrs_driver',
+        #     output='screen'
+        # ),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([

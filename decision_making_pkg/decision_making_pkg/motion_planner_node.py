@@ -6,6 +6,7 @@ from rclpy.qos import QoSDurabilityPolicy
 from rclpy.qos import QoSReliabilityPolicy
 
 from std_msgs.msg import String, Bool
+from geometry_msgs.msg import Twist
 from interfaces_pkg.msg import PathPlanningResult, DetectionArray, MotionCommand
 from .lib import decision_making_func_lib as DMFL
 
@@ -14,6 +15,7 @@ SUB_DETECTION_TOPIC_NAME = "detections"
 SUB_PATH_TOPIC_NAME = "path_planning_result"
 SUB_TRAFFIC_LIGHT_TOPIC_NAME = "yolov8_traffic_light_info"
 SUB_LIDAR_OBSTACLE_TOPIC_NAME = "lidar_obstacle_info"
+SUB_CMD_VEL_TOPIC_NAME = "cmd_vel"
 PUB_TOPIC_NAME = "topic_control_signal"
 
 #----------------------------------------------
@@ -30,6 +32,7 @@ class MotionPlanningNode(Node):
         self.sub_path_topic = self.declare_parameter('sub_lane_topic', SUB_PATH_TOPIC_NAME).value
         self.sub_traffic_light_topic = self.declare_parameter('sub_traffic_light_topic', SUB_TRAFFIC_LIGHT_TOPIC_NAME).value
         self.sub_lidar_obstacle_topic = self.declare_parameter('sub_lidar_obstacle_topic', SUB_LIDAR_OBSTACLE_TOPIC_NAME).value
+        self.sub_cmd_vel_topic = self.declare_parameter('sub_cmd_vel_topic', SUB_CMD_VEL_TOPIC_NAME).value
         self.pub_topic = self.declare_parameter('pub_topic', PUB_TOPIC_NAME).value
         
         self.timer_period = self.declare_parameter('timer', TIMER).value
@@ -47,6 +50,7 @@ class MotionPlanningNode(Node):
         self.path_data = None
         self.traffic_light_data = None
         self.lidar_data = None
+        self.cmd_vel_data = None
 
         self.steering_command = 0
         self.speed_command = 0
@@ -60,6 +64,7 @@ class MotionPlanningNode(Node):
         self.path_sub = self.create_subscription(PathPlanningResult, self.sub_path_topic, self.path_callback, self.qos_profile)
         self.traffic_light_sub = self.create_subscription(String, self.sub_traffic_light_topic, self.traffic_light_callback, self.qos_profile)
         self.lidar_sub = self.create_subscription(Bool, self.sub_lidar_obstacle_topic, self.lidar_callback, self.qos_profile)
+        self.cmd_vel_sub = self.create_subscription(Twist, self.sub_cmd_vel_topic, self.cmd_vel_callback, self.qos_profile)
 
         # 퍼블리셔 설정
         self.publisher = self.create_publisher(MotionCommand, self.pub_topic, self.qos_profile)
@@ -78,43 +83,29 @@ class MotionPlanningNode(Node):
 
     def lidar_callback(self, msg: Bool):
         self.lidar_data = msg
+    
+    def cmd_vel_callback(self, msg: Twist):
+        self.cmd_vel_data = msg
         
     def timer_callback(self):
 
         if self.lidar_data is not None and self.lidar_data.data is True:
-            # 라이다가 장애물을 감지한 경우
+            # 라이다가 장애물을 감지한 경우 - 정지
             self.steering_command = 0 
             self.speed_command = 0 
+            self.get_logger().info("장애물 감지로 인한 정지")
 
-        elif self.traffic_light_data is not None and self.traffic_light_data.data == 'Red':
-            # 빨간색 신호등을 감지한 경우
-            for detection in self.detection_data.detections:
-                if detection.class_name=='traffic_light':
-                    x_min = int(detection.bbox.center.position.x - detection.bbox.size.x / 2) # bbox의 좌측상단 꼭짓점 x좌표
-                    x_max = int(detection.bbox.center.position.x + detection.bbox.size.x / 2) # bbox의 우측하단 꼭짓점 x좌표
-                    y_min = int(detection.bbox.center.position.y - detection.bbox.size.y / 2) # bbox의 좌측상단 꼭짓점 y좌표
-                    y_max = int(detection.bbox.center.position.y + detection.bbox.size.y / 2) # bbox의 우측하단 꼭짓점 y좌표
-
-                    if y_max < 150:
-                        # 신호등 위치에 따른 정지명령 결정
-                        self.steering_command = 0 
-                        self.speed_command = 0
         else:
-            if self.path_data is None:
-                self.steering_command = 0
-            else:
-                target_slope = DMFL.calculate_slope_between_points(self.path_data[-10], self.path_data[-1])
+            # cmd_vel을 바탕으로 주행
+            if self.cmd_vel_data is not None:
+                # Twist 메시지에서 선속도와 각속도 추출
+                self.speed_command = self.cmd_vel_data.linear.x  # 전진/후진 속도 (m/s)
+                self.steering_command = self.cmd_vel_data.angular.z  # 조향 각속도 (rad/s)
                 
-                if target_slope > 0:
-                    self.steering_command =  7 # 예시 조향 값 (7이 최대 조향) 
-                elif target_slope < 0:
-                    self.steering_command =  -7
-                else:
-                    self.steering_command = 0
-
-
-            self.speed_command = 100  # 예시 속도 값 (255가 최대 속도)
-
+            else:
+                # cmd_vel 데이터가 없으면 정지
+                self.steering_command = 0
+                self.speed_command = 0
 
 
         self.get_logger().info(f"steering: {self.steering_command}, " 

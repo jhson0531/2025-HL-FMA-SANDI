@@ -11,8 +11,8 @@ from rclpy.qos import QoSProfile
 import time
 
 # Pure Pursuit 파라미터 (control.py와 동일한 구조)
-lookahead_distance = 2.0  # UTM 좌표 기준 (미터)
-speed = 0.1              # 기본 속도 (m/s)
+lookahead_distance = 1.0  # UTM 좌표 기준 (미터)
+speed = 25              # 기본 속도 (m/s)
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -85,7 +85,7 @@ def pure_pursuit(current_x, current_y, current_heading, path, index):
         desired_steering_angle = sign * math.pi/4
         v = 0.0
     
-    return v, desired_steering_angle, index
+    return v, desired_steering_angle*180/math.pi, index   # degree 단위로 변환
 
 class UTMPurePursuit(Node):
     def __init__(self):
@@ -100,9 +100,12 @@ class UTMPurePursuit(Node):
         self.yaw = 0.0
         
         # Waypoint 설정 (control.py의 goal과 유사)
+
         self.waypoints = [
-            (330030.501943, 4123118.148129),  # 첫 번째 waypoint
-            (330024.601050, 4123120.376601)   # 두 번째 waypoint
+            (329983.719725, 4123210.415129),  # 첫 번째 waypoint
+            (329977.396338, 4123210.620894),   # 두 번째 waypoint
+            (329964.442297, 4123208.130461),   # 세 번째 waypoint
+            (329955.384840, 4123213.997123)   # 네 번째 waypoint
         ]
         
         # 초기 위치 설정 (테스트용)
@@ -111,7 +114,7 @@ class UTMPurePursuit(Node):
         self.initial_yaw = 0.0
         
         # 테스트 모드 설정
-        self.test_mode = True  # True: 시뮬레이션 모드, False: 실제 토픽 모드
+        self.test_mode = False  # True: 시뮬레이션 모드, False: 실제 토픽 모드
         
         # control.py와 동일한 flag 시스템
         self.flag = 0  # 0: 대기, 1: 경로 생성, 2: 추적 중

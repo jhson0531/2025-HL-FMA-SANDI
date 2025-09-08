@@ -13,7 +13,7 @@ class OdomFromTicks(Node):
     def __init__(self):
         super().__init__('odom_from_ticks')
         # ... 파라미터 선언 부분은 이전과 동일 ...
-        self.declare_parameter('port', '/dev/ttyACM0')
+        self.declare_parameter('port', '/dev/ttyACM1')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('frame_id', 'odom')
         self.declare_parameter('child_frame_id', 'base_link')

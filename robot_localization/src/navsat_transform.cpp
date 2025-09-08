@@ -876,6 +876,11 @@ void NavSatTransform::setTransformGps(
     this->get_logger(), "Datum %s coordinate is (%s, %0.2f, %0.2f)",
     ((use_local_cartesian_) ? "Local Cartesian" : "UTM"), utm_zone_.c_str(), cartesian_x,
     cartesian_y);
+  
+  // 좌표계 타입 확인을 위한 추가 로그
+  RCLCPP_INFO(
+    this->get_logger(), "*** COORDINATE SYSTEM: %s ***", 
+    ((use_local_cartesian_) ? "ENU (Local Cartesian)" : "UTM"));
 
   transform_cartesian_pose_.setOrigin(tf2::Vector3(cartesian_x, cartesian_y, msg->altitude));
   transform_cartesian_pose_.setRotation(tf2::Quaternion::getIdentity());

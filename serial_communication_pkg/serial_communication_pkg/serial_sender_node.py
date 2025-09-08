@@ -14,10 +14,10 @@ from .lib import protocol_convert_func_lib as PCFL
 SUB_TOPIC_NAME = "topic_control_signal"
 
 # 아두이노 장치 이름 (ls /dev/ttyA* 명령을 터미널 창에 입력하여 확인)
-PORT='/dev/ttyACM0'
+PORT='/dev/ttyACM1'
 #----------------------------------------------
 
-ser = serial.Serial(PORT, 9600, timeout=1)
+ser = serial.Serial(PORT, 1152000, timeout=1)
 time.sleep(1)
 
 class SerialSenderNode(Node):

@@ -62,5 +62,22 @@ def generate_launch_description():
                         ('odometry/gps', 'odometry/gps'),
                         ('odometry/filtered', 'odometry/global')]           
 
+           ),
+    # base_link 프레임 정의 (odom에서 base_link로)
+    launch_ros.actions.Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='odom_to_base_link',
+            arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'odom', 'base_link'],
+            output='screen'
+           ),
+    # GPS 센서의 물리적 위치를 base_link 기준으로 설정
+    # 실제 GPS 센서의 위치에 맞게 조정 필요
+    launch_ros.actions.Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='base_link_to_gps',
+            arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'gps'],
+            output='screen'
            )           
 ])
