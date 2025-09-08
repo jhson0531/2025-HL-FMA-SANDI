@@ -247,6 +247,12 @@ void NavSatTransform::computeTransform()
   if (!transform_good_ && has_transform_odom_ && has_transform_gps_ &&
     has_transform_imu_)
   {
+    // Transform 계산 조건 확인
+    RCLCPP_INFO(this->get_logger(), "*** TRANSFORM COMPUTATION STATUS ***");
+    RCLCPP_INFO(this->get_logger(), "has_transform_odom_: %s", has_transform_odom_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "has_transform_gps_: %s", has_transform_gps_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "has_transform_imu_: %s", has_transform_imu_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "transform_good_: %s", transform_good_ ? "true" : "false");
     // The UTM pose we have is given at the location of the GPS sensor on the
     // robot. We need to get the UTM pose of the robot's origin.
     tf2::Transform transform_cartesian_pose_corrected;
@@ -631,12 +637,21 @@ void NavSatTransform::gpsFixCallback(
     double cartesian_x = 0;
     double cartesian_y = 0;
     std::string cartesian_zone_tmp;
+    
+    // 실시간 GPS 변환 과정 출력
+    RCLCPP_INFO(this->get_logger(), "*** REAL-TIME GPS CONVERSION ***");
+    RCLCPP_INFO(this->get_logger(), "GPS Input - Lat: %f, Lon: %f", msg->latitude, msg->longitude);
+    
     navsat_conversions::LLtoUTM(
       msg->latitude,
       msg->longitude,
       cartesian_y,
       cartesian_x,
       cartesian_zone_tmp);
+    
+    RCLCPP_INFO(this->get_logger(), "UTM Output - X: %f, Y: %f", cartesian_x, cartesian_y);
+    RCLCPP_INFO(this->get_logger(), "UTM Zone: %s", cartesian_zone_tmp.c_str());
+    
     latest_cartesian_pose_.setOrigin(tf2::Vector3(cartesian_x, cartesian_y, msg->altitude));
     latest_cartesian_covariance_.setZero();
 
@@ -788,6 +803,11 @@ bool NavSatTransform::prepareGpsOdometry(nav_msgs::msg::Odometry * gps_odom)
   bool new_data = false;
 
   if (transform_good_ && gps_updated_ && odom_updated_) {
+    // 발행 조건 확인
+    RCLCPP_INFO(this->get_logger(), "*** GPS ODOMETRY PUBLICATION STATUS ***");
+    RCLCPP_INFO(this->get_logger(), "transform_good_: %s", transform_good_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "gps_updated_: %s", gps_updated_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "odom_updated_: %s", odom_updated_ ? "true" : "false");
     *gps_odom = cartesianToMap(latest_cartesian_pose_);
 
     tf2::Transform transformed_cartesian_gps;
@@ -822,6 +842,11 @@ bool NavSatTransform::prepareGpsOdometry(nav_msgs::msg::Odometry * gps_odom)
     tf2::toMsg(transformed_cartesian_robot, gps_odom->pose.pose);
     gps_odom->pose.pose.position.z =
       (zero_altitude_ ? 0.0 : gps_odom->pose.pose.position.z);
+    
+    // 발행되는 좌표 출력
+    RCLCPP_INFO(this->get_logger(), "*** PUBLISHED GPS ODOMETRY ***");
+    RCLCPP_INFO(this->get_logger(), "Published Position - X: %f, Y: %f, Z: %f", 
+               gps_odom->pose.pose.position.x, gps_odom->pose.pose.position.y, gps_odom->pose.pose.position.z);
 
     // Copy the measurement's covariance matrix so that we can rotate it later
     for (size_t i = 0; i < POSE_SIZE; i++) {
@@ -859,6 +884,11 @@ void NavSatTransform::setTransformGps(
     // UTM meridian convergence is not meaningful when using local cartesian, so set it to 0.0
     utm_meridian_convergence_ = 0.0;
   } else {
+    // 입력 GPS 데이터 출력
+    RCLCPP_INFO(this->get_logger(), "*** GPS INPUT DATA ***");
+    RCLCPP_INFO(this->get_logger(), "Input GPS - Lat: %f, Lon: %f, Alt: %f", 
+               msg->latitude, msg->longitude, msg->altitude);
+    
     navsat_conversions::LLtoUTM(
       msg->latitude,
       msg->longitude,
@@ -867,6 +897,16 @@ void NavSatTransform::setTransformGps(
       utm_zone_,
       utm_meridian_convergence_);
     utm_meridian_convergence_ *= navsat_conversions::RADIANS_PER_DEGREE;
+    
+    // UTM Zone 정보 상세 출력
+    RCLCPP_INFO(this->get_logger(), "*** UTM ZONE INFO ***");
+    RCLCPP_INFO(this->get_logger(), "UTM Zone: %s", utm_zone_.c_str());
+    RCLCPP_INFO(this->get_logger(), "UTM Meridian Convergence: %f degrees", 
+               utm_meridian_convergence_ * navsat_conversions::DEGREES_PER_RADIAN);
+    
+    // UTM 변환 후 데이터 출력
+    RCLCPP_INFO(this->get_logger(), "*** UTM CONVERSION RESULT ***");
+    RCLCPP_INFO(this->get_logger(), "UTM Easting: %f, UTM Northing: %f", cartesian_x, cartesian_y);
   }
 
   RCLCPP_INFO(

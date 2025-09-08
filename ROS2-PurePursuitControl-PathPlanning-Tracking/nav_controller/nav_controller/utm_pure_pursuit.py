@@ -12,7 +12,7 @@ import time
 
 # Pure Pursuit 파라미터 (control.py와 동일한 구조)
 lookahead_distance = 1.0  # UTM 좌표 기준 (미터)
-speed = 25              # 기본 속도 (m/s)
+speed = 0.1            # 기본 속도 (m/s)
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -85,7 +85,7 @@ def pure_pursuit(current_x, current_y, current_heading, path, index):
         desired_steering_angle = sign * math.pi/4
         v = 0.0
     
-    return v, desired_steering_angle*180/math.pi, index   # degree 단위로 변환
+    return v, desired_steering_angle, index   # degree 단위로 변환
 
 class UTMPurePursuit(Node):
     def __init__(self):
@@ -109,8 +109,8 @@ class UTMPurePursuit(Node):
         ]
         
         # 초기 위치 설정 (테스트용)
-        self.initial_x = 330034.491650
-        self.initial_y = 4123117.956354
+        self.initial_x = 329983.719725
+        self.initial_y = 4123210.415129
         self.initial_yaw = 0.0
         
         # 테스트 모드 설정
