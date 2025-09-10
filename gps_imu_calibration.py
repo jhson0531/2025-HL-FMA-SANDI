@@ -22,7 +22,7 @@ class GPSIMUCalibration(Node):
         )
         
         # 시리얼 포트 설정
-        self.serial_port = "/dev/ttyUSB1"
+        self.serial_port = "/dev/ttyACM1"
         self.baud_rate = 115200
         self.serial_connection = None
         
@@ -38,43 +38,58 @@ class GPSIMUCalibration(Node):
         self.second_utm = None       # 두 번째 UTM 좌표
         
         # 상태 관리
-        self.calibration_state = "WAITING_FOR_FIRST_GPS"  # WAITING_FOR_FIRST_GPS, WAITING_FOR_SECOND_GPS, CALCULATING, COMPLETED
+        self.calibration_state = "INITIALIZING"  # INITIALIZING, WAITING_FOR_FIRST_GPS, WAITING_FOR_SECOND_GPS, CALCULATING, COMPLETED
         self.gps_data_received = False
         
         self.get_logger().info("GPS-IMU 보정 프로그램이 시작되었습니다.")
         self.get_logger().info(f"전진 시간: {self.forward_duration}초")
-        self.get_logger().info("첫 번째 GPS 위치를 기다리는 중...")
         
-    def connect_serial(self):
-        """시리얼 포트 연결"""
+        # 시리얼 포트 초기화를 먼저 수행
+        self.initialize_serial_port()
+        time.sleep(1)
+        
+    def initialize_serial_port(self):
+        """시리얼 포트 초기화 (시작 시 한 번만 실행)"""
         try:
             self.serial_connection = serial.Serial(
                 port=self.serial_port,
                 baudrate=self.baud_rate,
                 timeout=1
             )
-            self.get_logger().info(f"시리얼 포트 연결 성공: {self.serial_port}")
-            return True
+            self.get_logger().info(f"시리얼 포트 초기화 완료: {self.serial_port} (115200 baud)")
+            
+            # 초기화 완료 후 상태 변경
+            self.calibration_state = "WAITING_FOR_FIRST_GPS"
+            self.get_logger().info("첫 번째 GPS 위치를 기다리는 중...")
+            
         except Exception as e:
-            self.get_logger().error(f"시리얼 포트 연결 실패: {e}")
-            return False
+            self.get_logger().error(f"시리얼 포트 초기화 실패: {e}")
+            self.get_logger().error("시리얼 포트 없이 GPS 데이터만 수집합니다.")
+            self.calibration_state = "WAITING_FOR_FIRST_GPS"
+            self.serial_connection = None
     
     def send_serial_command(self, command):
         """시리얼 명령 전송"""
         if self.serial_connection and self.serial_connection.is_open:
             try:
                 self.serial_connection.write(f"{command}\n".encode())
+                self.serial_connection.flush()  # 버퍼 플러시 추가
+                time.sleep(0.1)  # 짧은 지연 추가
                 self.get_logger().info(f"시리얼 명령 전송: {command}")
                 return True
             except Exception as e:
                 self.get_logger().error(f"시리얼 명령 전송 실패: {e}")
                 return False
         else:
-            self.get_logger().error("시리얼 포트가 연결되지 않았습니다.")
+            self.get_logger().warn("시리얼 포트가 연결되지 않았습니다.")
             return False
     
     def gps_callback(self, msg):
         """GPS 데이터 처리"""
+        # 초기화 중이면 GPS 데이터 무시
+        if self.calibration_state == "INITIALIZING":
+            return
+            
         if msg.status.status < 0:  # GPS 신호가 없으면 무시
             return
             
@@ -102,18 +117,15 @@ class GPSIMUCalibration(Node):
             self.get_logger().info("=" * 60)
             self.get_logger().info("로봇을 전진시킵니다...")
             
-            # 시리얼 포트 연결 및 로봇 전진 명령
-            if self.connect_serial():
-                command = f"s{self.steering_angle}p{self.forward_speed}"
-                if self.send_serial_command(command):
-                    # 전진 시간 후 정지
-                    time.sleep(self.forward_duration)
-                    self.send_serial_command("s0p0")  # 정지
-                    self.get_logger().info("로봇 전진 완료. 두 번째 GPS 위치를 기다리는 중...")
-                else:
-                    self.get_logger().error("로봇 전진 명령 실패")
+            # 로봇 전진 명령 (시리얼 포트는 이미 초기화됨)
+            command = f"s{self.steering_angle}p{self.forward_speed}"
+            if self.send_serial_command(command):
+                # 전진 시간 후 정지
+                time.sleep(self.forward_duration)
+                self.send_serial_command("s0p0")  # 정지
+                self.get_logger().info("로봇 전진 완료. 두 번째 GPS 위치를 기다리는 중...")
             else:
-                self.get_logger().error("시리얼 포트 연결 실패")
+                self.get_logger().error("로봇 전진 명령 실패")
                 
         elif self.calibration_state == "WAITING_FOR_SECOND_GPS":
             # 두 번째 위치 저장
@@ -202,10 +214,18 @@ class GPSIMUCalibration(Node):
         self.forward_duration = duration
         self.get_logger().info(f"전진 시간이 {duration}초로 설정되었습니다.")
     
+    def close_serial_port(self):
+        """시리얼 포트 종료"""
+        if self.serial_connection and self.serial_connection.is_open:
+            try:
+                self.serial_connection.close()
+                self.get_logger().info("시리얼 포트가 종료되었습니다.")
+            except Exception as e:
+                self.get_logger().error(f"시리얼 포트 종료 실패: {e}")
+    
     def __del__(self):
         """소멸자 - 시리얼 포트 정리"""
-        if self.serial_connection and self.serial_connection.is_open:
-            self.serial_connection.close()
+        self.close_serial_port()
 
 def main(args=None):
     rclpy.init(args=args)
@@ -221,6 +241,8 @@ def main(args=None):
     except KeyboardInterrupt:
         calibration_node.get_logger().info("보정 프로그램 종료 중...")
     finally:
+        # 시리얼 포트 종료
+        calibration_node.close_serial_port()
         calibration_node.destroy_node()
         rclpy.shutdown()
 

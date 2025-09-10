@@ -12,7 +12,7 @@ import time
 
 # Pure Pursuit 파라미터 (control.py와 동일한 구조)
 lookahead_distance = 1.0  # UTM 좌표 기준 (미터)
-speed = 20.0            # 기본 속도 (m/s)
+speed = 30.0            # 기본 속도 (m/s)
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -126,7 +126,7 @@ class UTMPurePursuit(Node):
         # 토픽 구독자
         self.subscription = self.create_subscription(
             Odometry,
-            '/odometry/global',
+            '/odometry/utm',
             self.info_callback,
             10
         )
