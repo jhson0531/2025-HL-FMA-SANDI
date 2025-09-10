@@ -121,6 +121,8 @@ class IahrsDriver(Node):
                         sync_data_splitted[8] * (math.pi / 180),
                         "sxyz",
                     )
+
+                    
                     self._msg.orientation.w = q[0]
                     self._msg.orientation.x = q[1]
                     self._msg.orientation.y = q[2]
@@ -163,7 +165,6 @@ class IahrsDriver(Node):
         br.sendTransform(t)
 
     def _reset_sensor(self):
-        self._write_port_timeout("za")  # 초기화
         self._set_sync_port()  # USB/Serial
         self._set_sync_period(10)  # 주기 10ms (100hz)
         self._set_sync_data(
@@ -172,7 +173,8 @@ class IahrsDriver(Node):
             | self.CONF_SYNC_EULER
             # | self.CONF_SYNC_QUATERNION  # 펌웨어 버그로 데이터가 유효하지 않음 (F/W v1.08)
         )
-
+        self._write_port("mv=1.0")
+    
     def _reset_angle(self):
         self._write_port("c=7")
 
