@@ -1,5 +1,6 @@
 import time
 import serial
+import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
@@ -22,7 +23,7 @@ class SerialSenderNode(Node):
     super().__init__('serial_sender_node')
     
     # 시리얼 포트 초기화
-    self.ser = serial.Serial(PORT, 1152000, timeout=1)
+    self.ser = serial.Serial(PORT, 115200, timeout=1)  # 아두이노와 동일한 baud rate로 수정
     time.sleep(1)
     
     self.declare_parameter('sub_topic', sub_topic)
@@ -36,42 +37,38 @@ class SerialSenderNode(Node):
     
     self.subscription = self.create_subscription(MotionCommand, self.sub_topic, self.data_callback, qos_profile)
     
-    # input을 통한 수동 제어 모드
-    self.input_control_mode()
+    # 시리얼 읽기 스레드 시작
+    self.serial_thread = threading.Thread(target=self.read_serial_data, daemon=True)
+    self.serial_thread.start()
 
-  def input_control_mode(self):
-    """input을 통한 수동 제어 모드"""
-    print("=== 수동 제어 모드 ===")
-    print("steering과 speed 값을 입력하세요 (종료하려면 'q' 입력)")
-    
+    # 주기적으로 기본 명령(steering=0, speed=10) 전송
+    self.timer = self.create_timer(0.1, self.send_default_command)
+
+  def read_serial_data(self):
+    """아두이노에서 보내는 시리얼 데이터를 읽어서 출력"""
     while True:
       try:
-        steering_input = input("steering (-100 ~ 100): ")
-        if steering_input.lower() == 'q':
-          break
-          
-        speed_input = input("speed (-100 ~ 100): ")
-        if speed_input.lower() == 'q':
-          break
-          
-        steering = float(steering_input)
-        speed = float(speed_input)
-        
-        # 값 범위 체크
-        steering = max(-100, min(100, steering))
-        speed = max(-100, min(100, speed))
-        
-        # 시리얼 메시지 전송
-        serial_msg = PCFL.convert_serial_message(steering, speed)
-        self.ser.write(serial_msg.encode())
-        
-        print(f"전송됨 - steering: {steering}, speed: {speed}")
-        
-      except ValueError:
-        print("올바른 숫자를 입력하세요.")
-      except KeyboardInterrupt:
-        print("\n프로그램을 종료합니다.")
-        break
+        if self.ser.in_waiting > 0:
+          line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+          if line:
+            print(f"[아두이노] {line}")
+        time.sleep(0.1)  # CPU 사용량 줄이기 - sleep 시간 증가
+      except Exception as e:
+        print(f"시리얼 읽기 오류: {e}")
+        # 오류 발생 시에도 계속 실행
+        time.sleep(0.5)
+
+  def send_default_command(self):
+    """주기적으로 steering=0, speed=10 을 전송"""
+    try:
+      serial_msg = PCFL.convert_serial_message(0.0, 10.0)
+      self.ser.write(serial_msg.encode())
+    except Exception as e:
+      print(f"시리얼 전송 오류: {e}")
+
+  def input_control_mode(self):
+    """비활성화: 기본 명령을 타이머로 전송하므로 입력 모드 사용 안 함"""
+    print("입력 모드는 비활성화되었습니다. 타이머로 기본 명령(0,10)을 전송합니다.")
 
   def data_callback(self, msg):
     steering = msg.steering
@@ -87,9 +84,7 @@ def main(args=None):
   rclpy.init(args=args)
   node = SerialSenderNode()
   try:
-      # input_control_mode가 실행되므로 rclpy.spin은 실행되지 않음
-      # rclpy.spin(node)
-      pass
+      rclpy.spin(node)
       
   except KeyboardInterrupt:
       print("\n\nshutdown\n\n")
