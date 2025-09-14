@@ -6,14 +6,14 @@
 #include <math.h>
 
 // ===== 핀 매핑 =====
-const int STEERING_1 = 2;
-const int STEERING_2 = 3;
 const int FORWARD_1  = 4;
 const int FORWARD_2  = 5;
 const int BACKWARD_1 = 6;
 const int BACKWARD_2 = 7;
-const uint8_t ENCODER_A = 18;
-const uint8_t ENCODER_B = 19;
+const int STEERING_1 = 8;
+const int STEERING_2 = 9;
+const uint8_t ENCODER_A = 14;
+const uint8_t ENCODER_B = 15;
 const int POT_PIN = A0;
 
 // ── 모터 드라이버 객체

@@ -103,3 +103,4 @@ waypoint를 변경하려면 `utm_pure_pursuit_test.py`의 `self.waypoints` 리�
 ### 제어 명령이 발행되지 않는 경우
 - odometry 데이터가 정상적으로 수신되고 있는지 확인
 - 경로 생성이 완료되었는지 로그 확인
+

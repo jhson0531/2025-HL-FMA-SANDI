@@ -33,3 +33,4 @@ def generate_launch_description():
             condition=launch.conditions.IfCondition(LaunchConfiguration('use_visualizer'))
         ),
     ])
+
