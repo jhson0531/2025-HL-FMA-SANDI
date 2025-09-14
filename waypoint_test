@@ -1,0 +1,302 @@
+37.239106, 127.083841
+37.239107, 127.083796
+37.239126, 127.083729
+
+UTM X: 330034.491650, UTM Y: 4123117.956354, 방위각: 0.000000, Zone: 52S
+UTM X: 330030.501943, UTM Y: 4123118.148129, 방위각: 0.000000, Zone: 52S
+UTM X: 330024.601050, UTM Y: 4123120.376601, 방위각: 0.000000, Zone: 52S
+
+
+
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+import numpy as np
+import math
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist, PoseStamped
+from rclpy.qos import QoSProfile
+import time
+
+class UTMPurePursuit(Node):
+    def __init__(self):
+        super().__init__('utm_pure_pursuit')
+        
+        # Pure Pursuit 파라미터
+        self.lookahead_distance = 2.0  # UTM 좌표 기준 (미터)
+        self.max_speed = 0.5          # 최대 선속도 (m/s)
+        self.min_speed = 0.1          # 최소 선속도 (m/s)
+        self.max_angular_speed = 1.0  # 최대 각속도 (rad/s)
+        self.waypoint_tolerance = 1.0  # waypoint 도달 판정 거리 (미터)
+        
+        # 로봇 상태
+        self.current_x = 0.0
+        self.current_y = 0.0
+        self.current_yaw = 0.0
+        self.current_speed = 0.0
+        
+        # Waypoint 설정
+        self.waypoints = [
+            (330030.501943, 4123118.148129),  # 첫 번째 waypoint
+            (330024.601050, 4123120.376601)   # 두 번째 waypoint
+        ]
+        self.current_waypoint_index = 0
+        self.total_waypoints = len(self.waypoints)
+        
+        # 초기 위치 설정 (테스트용)
+        self.initial_x = 330034.491650
+        self.initial_y = 4123117.956354
+        self.initial_yaw = 0.0
+        
+        # 테스트 모드 설정
+        self.test_mode = True  # True: 시뮬레이션 모드, False: 실제 토픽 모드
+        
+        # ROS2 인터페이스 설정
+        self.setup_ros_interfaces()
+        
+        # 테스트 모드 초기화
+        if self.test_mode:
+            self.setup_test_mode()
+        
+        # 제어 타이머
+        self.control_timer = self.create_timer(0.1, self.control_loop)  # 10Hz
+        
+        self.get_logger().info("UTM Pure Pursuit 노드가 시작되었습니다.")
+        self.get_logger().info(f"테스트 모드: {'ON' if self.test_mode else 'OFF'}")
+        self.get_logger().info(f"총 waypoint 수: {self.total_waypoints}")
+        
+    def setup_ros_interfaces(self):
+        """ROS2 인터페이스 설정"""
+        # cmd_vel 발행자
+        self.cmd_vel_publisher = self.create_publisher(Twist, 'cmd_vel', 10)
+        
+        # 실제 토픽 구독자 (테스트 모드가 아닐 때만 활성화)
+        if not self.test_mode:
+            # /odometry/global 구독자
+            self.odom_subscription = self.create_subscription(
+                Odometry,
+                '/odometry/global',
+                self.odometry_callback,
+                QoSProfile(depth=10)
+            )
+            
+            # 목표점 설정 구독자 (선택사항)
+            self.goal_subscription = self.create_subscription(
+                PoseStamped,
+                'goal_pose',
+                self.goal_callback,
+                QoSProfile(depth=10)
+            )
+    
+    def setup_test_mode(self):
+        """테스트 모드 설정"""
+        self.current_x = self.initial_x
+        self.current_y = self.initial_y
+        self.current_yaw = self.initial_yaw
+        self.current_speed = 0.0
+        
+        self.get_logger().info(f"테스트 모드 초기 위치: X={self.current_x:.3f}, Y={self.current_y:.3f}")
+        
+        # 시뮬레이션용 타이머 (로봇 움직임 시뮬레이션)
+        self.simulation_timer = self.create_timer(0.1, self.simulate_robot_movement)
+    
+    def odometry_callback(self, msg):
+        """실제 odometry 데이터 처리"""
+        if self.test_mode:
+            return
+            
+        # UTM 좌표 추출
+        self.current_x = msg.pose.pose.position.x
+        self.current_y = msg.pose.pose.position.y
+        
+        # 쿼터니언에서 yaw 각도 추출
+        self.current_yaw = self.euler_from_quaternion(
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w
+        )
+        
+        # 속도 정보 추출
+        self.current_speed = math.sqrt(
+            msg.twist.twist.linear.x**2 + msg.twist.twist.linear.y**2
+        )
+    
+    def goal_callback(self, msg):
+        """목표점 설정 콜백 (선택사항)"""
+        if self.test_mode:
+            return
+            
+        goal_x = msg.pose.position.x
+        goal_y = msg.pose.position.y
+        self.get_logger().info(f"새로운 목표점 설정: X={goal_x:.3f}, Y={goal_y:.3f}")
+        
+        # 새로운 waypoint 추가 또는 기존 waypoint 업데이트
+        # 필요에 따라 구현
+    
+    def euler_from_quaternion(self, x, y, z, w):
+        """쿼터니언에서 yaw 각도 추출"""
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = math.atan2(t3, t4)
+        return yaw_z
+    
+    def calculate_distance(self, x1, y1, x2, y2):
+        """두 점 사이의 거리 계산"""
+        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    
+    def calculate_angle_to_target(self, target_x, target_y):
+        """목표점까지의 각도 계산"""
+        return math.atan2(target_y - self.current_y, target_x - self.current_x)
+    
+    def pure_pursuit_control(self):
+        """Pure Pursuit 제어 알고리즘"""
+        if self.current_waypoint_index >= self.total_waypoints:
+            # 모든 waypoint 완료
+            return 0.0, 0.0, True
+        
+        # 현재 목표 waypoint
+        target_x, target_y = self.waypoints[self.current_waypoint_index]
+        
+        # 목표점까지의 거리 계산
+        distance_to_target = self.calculate_distance(
+            self.current_x, self.current_y, target_x, target_y
+        )
+        
+        # waypoint 도달 판정
+        if distance_to_target < self.waypoint_tolerance:
+            self.get_logger().info(
+                f"Waypoint {self.current_waypoint_index + 1} 도달! "
+                f"거리: {distance_to_target:.2f}m"
+            )
+            self.current_waypoint_index += 1
+            
+            if self.current_waypoint_index >= self.total_waypoints:
+                self.get_logger().info("모든 waypoint 완료!")
+                return 0.0, 0.0, True
+        
+        # 다음 목표 waypoint가 있으면 해당 waypoint 사용
+        if self.current_waypoint_index < self.total_waypoints:
+            target_x, target_y = self.waypoints[self.current_waypoint_index]
+        
+        # 목표점까지의 각도 계산
+        target_angle = self.calculate_angle_to_target(target_x, target_y)
+        
+        # 각도 차이 계산 (최단 경로)
+        angle_error = target_angle - self.current_yaw
+        while angle_error > math.pi:
+            angle_error -= 2 * math.pi
+        while angle_error < -math.pi:
+            angle_error += 2 * math.pi
+        
+        # 속도 계산 (각도 오차에 따라 조절)
+        speed_factor = max(0.1, 1.0 - abs(angle_error) / math.pi)
+        linear_speed = self.min_speed + (self.max_speed - self.min_speed) * speed_factor
+        
+        # 각속도 계산 (Pure Pursuit)
+        angular_speed = 2.0 * math.sin(angle_error) / self.lookahead_distance
+        angular_speed = max(-self.max_angular_speed, 
+                           min(self.max_angular_speed, angular_speed))
+        
+        return linear_speed, angular_speed, False
+    
+    def control_loop(self):
+        """메인 제어 루프"""
+        # Pure Pursuit 제어 계산
+        linear_speed, angular_speed, mission_complete = self.pure_pursuit_control()
+        
+        # cmd_vel 메시지 생성 및 발행
+        twist = Twist()
+        twist.linear.x = linear_speed
+        twist.angular.z = angular_speed
+        
+        self.cmd_vel_publisher.publish(twist)
+        
+        # 상태 로깅
+        if self.current_waypoint_index < self.total_waypoints:
+            target_x, target_y = self.waypoints[self.current_waypoint_index]
+            distance = self.calculate_distance(
+                self.current_x, self.current_y, target_x, target_y
+            )
+            
+            self.get_logger().info(
+                f"현재 위치: ({self.current_x:.2f}, {self.current_y:.2f}) | "
+                f"목표: ({target_x:.2f}, {target_y:.2f}) | "
+                f"거리: {distance:.2f}m | "
+                f"속도: {linear_speed:.2f}m/s, {angular_speed:.2f}rad/s"
+            )
+        
+        if mission_complete:
+            self.get_logger().info("미션 완료! 로봇 정지.")
+            # 미션 완료 후 정지
+            twist = Twist()
+            self.cmd_vel_publisher.publish(twist)
+    
+    def simulate_robot_movement(self):
+        """테스트 모드에서 로봇 움직임 시뮬레이션"""
+        if not self.test_mode:
+            return
+        
+        # 간단한 시뮬레이션: 현재 cmd_vel에 따라 위치 업데이트
+        # 실제로는 더 정교한 시뮬레이션이 필요할 수 있음
+        dt = 0.1  # 타이머 주기
+        
+        # 현재 cmd_vel 값 가져오기 (실제로는 이전 프레임의 값 사용)
+        # 여기서는 간단히 목표점 방향으로 이동하는 것으로 시뮬레이션
+        if self.current_waypoint_index < self.total_waypoints:
+            target_x, target_y = self.waypoints[self.current_waypoint_index]
+            
+            # 목표점 방향으로 이동
+            dx = target_x - self.current_x
+            dy = target_y - self.current_y
+            distance = math.sqrt(dx**2 + dy**2)
+            
+            if distance > 0.1:  # 10cm 이상 떨어져 있으면
+                # 목표점 방향으로 이동
+                move_distance = min(0.1, distance)  # 최대 10cm씩 이동
+                self.current_x += (dx / distance) * move_distance
+                self.current_y += (dy / distance) * move_distance
+                
+                # yaw 각도 업데이트
+                self.current_yaw = math.atan2(dy, dx)
+    
+    def add_waypoint(self, x, y):
+        """새로운 waypoint 추가"""
+        self.waypoints.append((x, y))
+        self.total_waypoints = len(self.waypoints)
+        self.get_logger().info(f"새로운 waypoint 추가: ({x:.3f}, {y:.3f})")
+    
+    def clear_waypoints(self):
+        """모든 waypoint 초기화"""
+        self.waypoints = []
+        self.current_waypoint_index = 0
+        self.total_waypoints = 0
+        self.get_logger().info("모든 waypoint 초기화됨")
+    
+    def set_test_mode(self, enable):
+        """테스트 모드 설정"""
+        self.test_mode = enable
+        if enable:
+            self.setup_test_mode()
+        self.get_logger().info(f"테스트 모드: {'ON' if enable else 'OFF'}")
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    
+    # UTM Pure Pursuit 노드 생성
+    utm_pure_pursuit = UTMPurePursuit()
+    
+    try:
+        rclpy.spin(utm_pure_pursuit)
+    except KeyboardInterrupt:
+        utm_pure_pursuit.get_logger().info("노드 종료 중...")
+    finally:
+        utm_pure_pursuit.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+
