@@ -26,9 +26,11 @@ setup(
         	'control = nav_controller.control:main',
         	'utm_pure_pursuit = nav_controller.utm_pure_pursuit:main',
         	'utm_pure_pursuit_test = nav_controller.utm_pure_pursuit_test:main',
+        	'utm_pure_pursuit_simulation_test = nav_controller.utm_pure_pursuit_simulation_test:main',
         	'utm_test_publisher = nav_controller.utm_test_publisher:main',
         	'pure_pursuit_visualizer = nav_controller.pure_pursuit_visualizer:main',
-        	'simple_visualizer = nav_controller.simple_visualizer:main'
+        	'simple_visualizer = nav_controller.simple_visualizer:main',
+        	'path_generation_test = nav_controller.path_generation_test:main'
         ],
     },
 )

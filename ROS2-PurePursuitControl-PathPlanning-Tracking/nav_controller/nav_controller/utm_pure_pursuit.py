@@ -4,9 +4,14 @@ import numpy as np
 import math
 import scipy.interpolate as si
 from sensor_msgs.msg import NavSatFix, Imu
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseArray, Pose
+from std_msgs.msg import String
 import time
+import matplotlib.pyplot as plt
+from matplotlib import patches, transforms
 import utm
+import os
+import re
 
 # Pure Pursuit 파라미터 (구간별 적응적 제어)
 # 전방주시거리 설정
@@ -20,11 +25,11 @@ speed_curve = 20.0   # 곡선 구간 속도 (m/s)
 current_speed = 30.0   # 현재 속도 (초기값)
 
 # 보간 밀도 설정
-interpolation_density_straight = 5   # 직선 구간: 1m당 점의 개수
-interpolation_density_curve = 20     # 곡선 구간: 1m당 점의 개수
+interpolation_density_straight = 3   # 직선 구간: 1m당 점의 개수
+interpolation_density_curve = 10     # 곡선 구간: 1m당 점의 개수
 
-# 곡률 임계값 (이 값보다 크면 곡선으로 판단)
-curvature_threshold = 0.1  # 1/m
+# 수동 구간 경계 인덱스 설정 (waypoint 인덱스 기준)
+segment_boundary_indices = [16, 22, 29, 34]  # 이 배열을 수동으로 설정
 
 # 구간 전환 거리 임계값
 segment_transition_threshold = 0.4  # 전방주시거리에 추가할 거리 (m)
@@ -36,93 +41,136 @@ def euler_from_quaternion(x, y, z, w):
     yaw_z = math.atan2(t3, t4)
     return yaw_z
 
-def calculate_curvature(p1, p2, p3):
-    """세 점을 이용하여 곡률 계산"""
-    try:
-        # 벡터 계산
-        v1 = np.array([p2[0] - p1[0], p2[1] - p1[1]])
-        v2 = np.array([p3[0] - p2[0], p3[1] - p2[1]])
+def create_manual_segments(waypoints, boundary_indices):
+    """수동으로 지정된 경계 인덱스를 기반으로 구간 정보 생성"""
+    segments = []
+    total_waypoints = len(waypoints)
+    
+    if not boundary_indices or total_waypoints < 2:
+        # 경계가 없으면 전체를 직선으로 처리
+        segments.append({
+            'type': 'straight',
+            'start_index': 0,
+            'end_index': total_waypoints - 1,
+            'waypoint_start': 0,
+            'waypoint_end': total_waypoints - 1
+        })
+        return segments
+    
+    # 경계 인덱스 정렬 및 유효성 검사
+    sorted_boundaries = sorted([idx for idx in boundary_indices if 0 <= idx < total_waypoints])
+    
+    current_type = 'straight'  # 항상 직선으로 시작
+    start_idx = 0
+    
+    for boundary in sorted_boundaries:
+        # 현재 구간 저장
+        segments.append({
+            'type': current_type,
+            'start_index': start_idx,
+            'end_index': boundary,
+            'waypoint_start': start_idx,
+            'waypoint_end': boundary
+        })
         
-        # 외적 계산 (2D에서는 z 성분만)
-        cross_product = v1[0] * v2[1] - v1[1] * v2[0]
-        
-        # 벡터의 크기
-        v1_norm = np.linalg.norm(v1)
-        v2_norm = np.linalg.norm(v2)
-        
-        if v1_norm == 0 or v2_norm == 0:
-            return 0.0
-        
-        # 곡률 계산
-        curvature = abs(cross_product) / (v1_norm * v2_norm)
-        return curvature
-    except:
-        return 0.0
+        # 다음 구간으로 전환
+        start_idx = boundary + 1
+        current_type = 'curve' if current_type == 'straight' else 'straight'
+    
+    # 마지막 구간 처리
+    if start_idx < total_waypoints:
+        segments.append({
+            'type': current_type,
+            'start_index': start_idx,
+            'end_index': total_waypoints - 1,
+            'waypoint_start': start_idx,
+            'waypoint_end': total_waypoints - 1
+        })
+    
+    return segments
 
-def adaptive_bspline_planning(array):
-    """구간별 적응적 B-Spline 경로 스무딩"""
+def segment_based_bspline_planning(waypoints, segments):
+    """구간별 B-Spline 경로 스무딩"""
     try:
-        array = np.array(array)
-        if len(array) < 3:
-            return array.tolist(), []
+        if len(waypoints) < 2:
+            return [], []
         
-        x = array[:, 0]
-        y = array[:, 1]
+        total_path = []
+        path_segments = []
         
-        # 각 구간의 곡률 계산
-        curvatures = []
-        for i in range(1, len(array) - 1):
-            curvature = calculate_curvature(array[i-1], array[i], array[i+1])
-            curvatures.append(curvature)
-        
-        # 구간별 보간 밀도 결정
-        total_distance = 0.0
-        segment_distances = []
-        
-        for i in range(len(array) - 1):
-            dist = math.sqrt((array[i+1][0] - array[i][0])**2 + (array[i+1][1] - array[i][1])**2)
-            segment_distances.append(dist)
-            total_distance += dist
-        
-        # 구간별 보간 점 수 계산
-        total_interpolation_points = 0
-        for i, dist in enumerate(segment_distances):
-            if i < len(curvatures):
-                if curvatures[i] > curvature_threshold:
-                    # 곡선 구간
-                    points = max(10, int(dist * interpolation_density_curve))
-                else:
-                    # 직선 구간
-                    points = max(5, int(dist * interpolation_density_straight))
-            else:
-                # 마지막 구간
-                points = max(5, int(dist * interpolation_density_straight))
+        for segment in segments:
+            start_wp = segment['waypoint_start']
+            end_wp = segment['waypoint_end']
+            segment_type = segment['type']
             
-            total_interpolation_points += points
+            # 구간별 waypoint 추출
+            segment_waypoints = waypoints[start_wp:end_wp+1]
+            
+            if len(segment_waypoints) < 2:
+                continue
+            
+            # 구간별 거리 계산
+            segment_distance = 0.0
+            for i in range(len(segment_waypoints) - 1):
+                dist = math.sqrt((segment_waypoints[i+1][0] - segment_waypoints[i][0])**2 + 
+                               (segment_waypoints[i+1][1] - segment_waypoints[i][1])**2)
+                segment_distance += dist
+            
+            # 구간별 보간 밀도 결정
+            if segment_type == 'straight':
+                interpolation_density = interpolation_density_straight
+            else:  # curve
+                interpolation_density = interpolation_density_curve
+            
+            # 보간 점 수 계산
+            interpolation_points = max(2, int(segment_distance * interpolation_density))
+            
+            # B-Spline 스무딩
+            if len(segment_waypoints) >= 3:
+                x = np.array([wp[0] for wp in segment_waypoints])
+                y = np.array([wp[1] for wp in segment_waypoints])
+                
+                N = min(2, len(x) - 1)  # 차수는 점의 개수에 따라 조정
+                t = range(len(x))
+                x_tup = si.splrep(t, x, k=N)
+                y_tup = si.splrep(t, y, k=N)
+
+                x_list = list(x_tup)
+                xl = x.tolist()
+                x_list[1] = xl + [0.0] * (N + 1)
+
+                y_list = list(y_tup)
+                yl = y.tolist()
+                y_list[1] = yl + [0.0] * (N + 1)
+
+                ipl_t = np.linspace(0.0, len(x) - 1, interpolation_points)
+                rx = si.splev(ipl_t, x_list)
+                ry = si.splev(ipl_t, y_list)
+                segment_path = [(rx[i], ry[i]) for i in range(len(rx))]
+            else:
+                # 점이 2개뿐이면 선형 보간
+                segment_path = segment_waypoints
+            
+            # 전체 경로에 추가
+            path_start_idx = len(total_path)
+            total_path.extend(segment_path)
+            path_end_idx = len(total_path) - 1
+            
+            # 경로 구간 정보 저장
+            path_segments.append({
+                'type': segment_type,
+                'start_index': path_start_idx,
+                'end_index': path_end_idx,
+                'waypoint_start': start_wp,
+                'waypoint_end': end_wp,
+                'interpolation_density': interpolation_density,
+                'segment_distance': segment_distance
+            })
         
-        # B-Spline 스무딩
-        N = 2
-        t = range(len(x))
-        x_tup = si.splrep(t, x, k=N)
-        y_tup = si.splrep(t, y, k=N)
-
-        x_list = list(x_tup)
-        xl = x.tolist()
-        x_list[1] = xl + [0.0, 0.0, 0.0, 0.0]
-
-        y_list = list(y_tup)
-        yl = y.tolist()
-        y_list[1] = yl + [0.0, 0.0, 0.0, 0.0]
-
-        ipl_t = np.linspace(0.0, len(x) - 1, total_interpolation_points)
-        rx = si.splev(ipl_t, x_list)
-        ry = si.splev(ipl_t, y_list)
-        path = [(rx[i], ry[i]) for i in range(len(rx))]
-        
-        return path, curvatures
+        return total_path, path_segments
     except Exception as e:
-        print(f"보간 오류: {e}")
-        return array.tolist(), []
+        print(f"구간별 보간 오류: {e}")
+        return waypoints, []
 
 def pure_pursuit(current_x, current_y, current_heading, path, index, current_segment_info=None):
     """구간별 적응적 Pure Pursuit 알고리즘"""
@@ -231,32 +279,38 @@ class UTMPurePursuit(Node):
         self.y = 0.0
         self.yaw = 0.0
         
-        # Waypoint 설정 (control.py의 goal과 유사)
+        # Waypoint 파일 경로 (수동 지정)
+        self.waypoints_file_path = "/home/daesun/mando_9_14/src/utm_coordinates.txt"  # 필요 시 이 경로를 수정하세요
 
-        self.waypoints = [
-            (329983.719725, 4123210.415129),  # 첫 번째 waypoint
-            (329977.396338, 4123210.620894),   # 두 번째 waypoint
-            (329964.442297, 4123208.130461),   # 세 번째 waypoint
-            (329955.384840, 4123213.997123)   # 네 번째 waypoint
-        ]
-        
+        # Waypoint 설정 (control.py의 goal과 유사)
+        # Waypoint 설정: 단일 경로에서 로드
+        self.waypoints = self.load_waypoints_from_file(self.waypoints_file_path)
+
         
         # control.py와 동일한 flag 시스템
         self.flag = 0  # 0: 대기, 1: 경로 생성, 2: 추적 중
         self.path = []
-        self.path_curvatures = []  # 경로의 곡률 정보
         self.path_segments = []    # 경로의 구간 정보
         self.i = 0  # 경로 인덱스
         self.current_segment_index = 0  # 현재 구간 인덱스
+        self.last_segment_index = -1    # 마지막으로 로깅한 구간 인덱스
         self.first_odometry_received = False  # 첫 번째 GPS 데이터 수신 여부
         self.global_path_generated = False  # 전체 경로 생성 완료 여부
         self.current_waypoint_index = 0  # 현재 waypoint 인덱스
+        
+        # 수동 구간 경계 설정
+        self.segment_boundary_indices = segment_boundary_indices
         
         # IMU 보정각도 로드
         self.imu_calibration_angle = self.load_imu_calibration_angle()
         
         # ROS2 인터페이스 설정 (control.py와 동일한 구조)
         self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
+
+        self.path_publisher = self.create_publisher(PoseArray, 'interpolated_path', 10)
+        
+        # 구간 정보 발행을 위한 String 퍼블리셔 추가
+        self.segments_publisher = self.create_publisher(String, 'path_segments', 10)
         
         # 토픽 구독자 - GPS fix 데이터 구독
         self.gps_subscription = self.create_subscription(
@@ -293,7 +347,7 @@ class UTMPurePursuit(Node):
         # 여러 경로에서 파일 찾기
         possible_paths = [
             "imu_calibration_angle.txt",  # 현재 디렉토리
-            "/home/jh/ros2_workspace/src/imu_calibration_angle.txt",  # 절대 경로
+            "/home/daesun/mando_9_14/src/imu_calibration_angle.txt",  # 절대 경로
             os.path.join(os.path.dirname(__file__), "imu_calibration_angle.txt"),  # 스크립트 디렉토리
             os.path.join(os.getcwd(), "imu_calibration_angle.txt")  # 작업 디렉토리
         ]
@@ -318,88 +372,149 @@ class UTMPurePursuit(Node):
             self.get_logger().warn(f"  - {path}")
         self.get_logger().warn("기본값 0을 사용합니다.")
         return 0.0
-    
+
+    def load_waypoints_from_file(self, file_path):
+        """지정된 파일에서 (x, y) 좌표 리스트 로드
+
+        - utm_coordinates.txt: "UTM_X, UTM_Y" (콤마/공백 허용)
+        - remapped_wp.txt: "UTM_X UTM_Y YAW" (YAW는 무시)
+        """
+        waypoints = []
+        try:
+            if not os.path.exists(file_path):
+                self.get_logger().warn(f"Waypoints 파일이 존재하지 않습니다: {file_path}")
+                return waypoints
+            with open(file_path, 'r') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith('#'):
+                        continue
+                    # 주석 제거 후 숫자만 추출
+                    content = stripped.split('#', 1)[0]
+                    numbers = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", content)
+                    if len(numbers) >= 2:
+                        x = float(numbers[0])
+                        y = float(numbers[1])
+                        waypoints.append((x, y))
+            if waypoints:
+                self.get_logger().info(f"Waypoints 파일 로드 성공: {file_path}")
+                self.get_logger().info(f"총 {len(waypoints)}개 좌표를 불러왔습니다.")
+            else:
+                self.get_logger().warn(f"유효한 좌표를 찾지 못했습니다: {file_path}")
+        except Exception as e:
+            self.get_logger().warn(f"Waypoints 파일 읽기 실패({file_path}): {e}")
+        return waypoints
+
     def generate_global_path(self):
-        """전체 waypoint를 사용하여 글로벌 경로 생성"""
+        """수동 구간 설정을 기반으로 글로벌 경로 생성"""
         if len(self.waypoints) < 2:
             self.get_logger().error("waypoint가 2개 미만입니다. 경로 생성이 불가능합니다.")
             return False
         
-        # 현재 위치를 시작점으로 하고 모든 waypoint를 포함한 경로 생성
-        path_points = [(self.x, self.y)]  # 현재 위치를 시작점으로
-        path_points.extend(self.waypoints)  # 모든 waypoint 추가
         
-        self.get_logger().info("🗺️ 전체 경로 생성 중...")
-        self.get_logger().info(f"   총 경로점: {len(path_points)}개")
-        self.get_logger().info(f"   시작점: ({self.x:.3f}, {self.y:.3f})")
+        self.get_logger().info("🗺️ 수동 구간 기반 경로 생성 중...")
+        self.get_logger().info(f"   총 waypoint: {len(self.waypoints)}개")
+        self.get_logger().info(f"   현재 위치 시작점: ({self.x:.3f}, {self.y:.3f})")
         self.get_logger().info(f"   종료점: ({self.waypoints[-1][0]:.3f}, {self.waypoints[-1][1]:.3f})")
+        self.get_logger().info(f"   원본 구간 경계 인덱스: {self.segment_boundary_indices}")
+        self.get_logger().info(f"   조정된 구간 경계 인덱스: {adjusted_boundary_indices}")
         
-        # 적응적 B-Spline으로 경로 스무딩
+        # 수동 구간 생성 (현재 위치를 포함한 전체 경로 기준)
+        # 현재 위치를 시작점으로 하는 전체 경로 생성
+        full_path_waypoints = [(self.x, self.y)]  # 현재 위치를 시작점으로
+        full_path_waypoints.extend(self.waypoints)  # 모든 waypoint 추가
+        
+        # 구간 경계 인덱스를 현재 위치 포함 기준으로 조정
+        adjusted_boundary_indices = [idx + 1 for idx in self.segment_boundary_indices]  # +1은 현재 위치 때문
+        
+        waypoint_segments = create_manual_segments(full_path_waypoints, adjusted_boundary_indices)
+        
+        # 구간별 보간으로 경로 생성 (현재 위치 포함)
+        self.path, self.path_segments = segment_based_bspline_planning(full_path_waypoints, waypoint_segments)
+        
+        # 총 거리 계산
         total_distance = 0.0
-        for i in range(len(path_points) - 1):
-            dist = math.sqrt((path_points[i+1][0] - path_points[i][0])**2 + 
-                           (path_points[i+1][1] - path_points[i][1])**2)
+        for i in range(len(self.waypoints) - 1):
+            dist = math.sqrt((self.waypoints[i+1][0] - self.waypoints[i][0])**2 + 
+                           (self.waypoints[i+1][1] - self.waypoints[i][1])**2)
             total_distance += dist
         
-        # 적응적 보간으로 경로 생성
-        self.path, self.path_curvatures = adaptive_bspline_planning(path_points)
+        # 구간 통계 계산
+        straight_segments = sum(1 for seg in self.path_segments if seg['type'] == 'straight')
+        curve_segments = sum(1 for seg in self.path_segments if seg['type'] == 'curve')
+
+        # 보간된 경로를 ROS2 토픽으로 발행
+        self.publish_interpolated_path()
         
-        # 구간 정보 생성
-        self.path_segments = self.create_path_segments(self.path_curvatures)
+        # 구간 정보를 ROS2 토픽으로 발행
+        self.publish_path_segments()
         
-        # 곡률 통계 계산
-        straight_segments = sum(1 for c in self.path_curvatures if c <= curvature_threshold)
-        curve_segments = sum(1 for c in self.path_curvatures if c > curvature_threshold)
-        
-        self.get_logger().info("✅ 적응적 경로 생성 완료!")
+        self.get_logger().info("✅ 수동 구간 기반 경로 생성 완료!")
         self.get_logger().info(f"   스무딩된 경로점: {len(self.path)}개")
         self.get_logger().info(f"   총 거리: {total_distance:.2f}m")
         self.get_logger().info(f"   직선 구간: {straight_segments}개 (보간 밀도: {interpolation_density_straight}/m)")
         self.get_logger().info(f"   곡선 구간: {curve_segments}개 (보간 밀도: {interpolation_density_curve}/m)")
-        self.get_logger().info(f"   곡률 임계값: {curvature_threshold} 1/m")
         self.get_logger().info(f"   직선 전방주시거리: {lookahead_distance_straight}m")
         self.get_logger().info(f"   곡선 전방주시거리: {lookahead_distance_curve}m")
         self.get_logger().info(f"   직선 속도: {speed_straight}m/s")
         self.get_logger().info(f"   곡선 속도: {speed_curve}m/s")
         self.get_logger().info(f"   구간 그룹: {len(self.path_segments)}개")
         
+        # 구간별 상세 정보 출력
+        for i, seg in enumerate(self.path_segments):
+            self.get_logger().info(f"   구간 {i+1}: {seg['type']} (waypoint {seg['waypoint_start']}-{seg['waypoint_end']}, "
+                                 f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m)")
+        
         return True
     
-    def create_path_segments(self, curvatures):
-        """곡률 정보를 바탕으로 연속된 구간들을 생성"""
-        if not curvatures:
-            return []
-        
-        segments = []
-        current_type = 'straight' if curvatures[0] <= curvature_threshold else 'curve'
-        start_index = 0
-        
-        for i, curvature in enumerate(curvatures):
-            segment_type = 'curve' if curvature > curvature_threshold else 'straight'
+
+    def publish_interpolated_path(self):
+        """보간된 경로를 PoseArray 메시지로 발행"""
+        if not self.path:
+            return
             
-            # 구간 타입이 바뀌면 새로운 구간 시작
-            if segment_type != current_type:
-                # 이전 구간 저장
-                segments.append({
-                    'type': current_type,
-                    'start_index': start_index,
-                    'end_index': i - 1,
-                    'length': i - start_index
-                })
-                
-                # 새 구간 시작
-                current_type = segment_type
-                start_index = i
+        pose_array = PoseArray()
+        pose_array.header.stamp = self.get_clock().now().to_msg()
+        pose_array.header.frame_id = "utm"
         
-        # 마지막 구간 저장
-        segments.append({
-            'type': current_type,
-            'start_index': start_index,
-            'end_index': len(curvatures) - 1,
-            'length': len(curvatures) - start_index
-        })
+        for point in self.path:
+            pose = Pose()
+            pose.position.x = float(point[0])
+            pose.position.y = float(point[1])
+            pose.position.z = 0.0
+            # orientation은 기본값 (0, 0, 0, 1)
+            pose.orientation.w = 1.0
+            pose_array.poses.append(pose)
         
-        return segments
+        self.path_publisher.publish(pose_array)
+        self.get_logger().info(f"📡 보간된 경로 발행: {len(self.path)}개 점")
+    
+    def publish_path_segments(self):
+        """구간 정보를 JSON 형태로 발행"""
+        if not self.path_segments:
+            return
+        
+        import json
+        
+        # 총 경로 거리 계산
+        total_distance = 0.0
+        for i in range(len(self.waypoints) - 1):
+            dist = math.sqrt((self.waypoints[i+1][0] - self.waypoints[i][0])**2 + 
+                           (self.waypoints[i+1][1] - self.waypoints[i][1])**2)
+            total_distance += dist
+        
+        segments_data = {
+            'segments': self.path_segments,
+            'path_length': total_distance,
+            'total_waypoints': len(self.waypoints),
+            'total_path_points': len(self.path)
+        }
+        
+        msg = String()
+        msg.data = json.dumps(segments_data)
+        self.segments_publisher.publish(msg)
+        self.get_logger().info(f"📡 구간 정보 발행: {len(self.path_segments)}개 구간")
+        
     
     def update_current_segment(self):
         """현재 위치에 따라 구간 정보 업데이트"""
@@ -469,7 +584,7 @@ class UTMPurePursuit(Node):
                     target_speed = speed_straight
         
         # 속도는 부드러운 전환, 전방주시거리는 즉시 변경
-        speed_transition_rate = 0.05  # 5%씩 변화
+        speed_transition_rate = 0.2  # 20%씩 변화
         
         current_speed = (1 - speed_transition_rate) * current_speed + speed_transition_rate * target_speed
         current_lookahead_distance = target_lookahead  # 즉시 변경
@@ -537,6 +652,23 @@ class UTMPurePursuit(Node):
             
             # 속도와 전방주시거리 업데이트
             self.update_speed_and_lookahead(current_segment)
+
+            # 구간이 바뀐 경우: 현재 구간 타입과 속도/전방주시거리 로그
+            if current_segment is not None and self.current_segment_index != self.last_segment_index:
+                seg_type = current_segment['type']
+                seg_start = current_segment['start_index']
+                seg_end = current_segment['end_index']
+                try:
+                    speed_val = current_speed
+                except NameError:
+                    speed_val = 0.0
+                try:
+                    lookahead_val = current_lookahead_distance
+                except NameError:
+                    lookahead_val = 0.0
+                self.get_logger().info(f"🧭 현재 주행 구간: {seg_type} (index {seg_start}-{seg_end})")
+                self.get_logger().info(f"   현재 속도: {speed_val:.2f} m/s, 전방주시거리: {lookahead_val:.2f} m")
+                self.last_segment_index = self.current_segment_index
             
             # 구간별 적응적 Pure Pursuit 제어 실행
             twist = Twist()
