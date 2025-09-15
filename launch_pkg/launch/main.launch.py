@@ -55,74 +55,11 @@ def generate_launch_description():
             name='motion_planner_node',
             output='screen'
         ),
-        # Node(
-        #     package='decision_making_pkg',
-        #     executable='path_planner_node',
-        #     name='path_planner_node',
-        #     output='screen'
-        # ),
+
         Node(
          package='serial_communication_pkg',
             executable='serial_sender_node',
             name='serial_sender_node',
             output='screen'
-        ),
-
-        # GPS 및 센서 관련 노드들
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource([
-        #         os.path.join(
-        #             get_package_share_directory('ublox_gps'),
-        #             'launch',
-        #             'ublox_gps_node-launch.py'
-        #         )
-        #     ])
-        # ),
-
-        # Node(
-        #     package='fix2nmea',
-        #     executable='fix2nmea',
-        #     name='fix2nmea',
-        #     output='screen'
-        # ),
-
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource([
-        #         os.path.join(
-        #             get_package_share_directory('ntrip_client'),
-        #             'ntrip_client_launch.py'
-        #         )
-        #     ])
-        # ),
-
-        # Node(
-        #     package='iahrs_driver',
-        #     executable='driver',
-        #     name='iahrs_driver',
-        #     output='screen'
-        # ),
-
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([
-                os.path.join(
-                    get_package_share_directory('robot_localization'),
-                    'launch',
-                    'dual_ekf_navsat_example.launch.py'
-                )
-            ])
-        ),
-
-        # Node(
-        #     package='global_to_utm_odometry',
-        #     executable='global_to_utm_odometry',
-        #     name='global_to_utm_odometry',
-        #     output='screen'
-        # ),
-
-        Node(
-            package='odom_pkg',
-            executable='odom_from_ticks',
-            name='odom_from_ticks',
-            output='screen'
-        ),
+        )
     ])
