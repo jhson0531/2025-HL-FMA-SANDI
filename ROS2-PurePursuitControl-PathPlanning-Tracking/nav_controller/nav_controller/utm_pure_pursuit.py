@@ -15,24 +15,24 @@ import re
 
 # Pure Pursuit 파라미터 (구간별 적응적 제어)
 # 전방주시거리 설정
-lookahead_distance_straight = 2.0  # 직선 구간 전방주시거리 (미터)
+lookahead_distance_straight = 1.5  # 직선 구간 전방주시거리 (미터)
 lookahead_distance_curve = 0.5     # 곡선 구간 전방주시거리 (미터)
 current_lookahead_distance = 0.3   # 현재 전방주시거리 (초기값)
 
 # 속도 설정
 speed_straight = 30.0 #직선 구간 속도 (m/s)
-speed_curve = 20.0   # 곡선 구간 속도 (m/s)
+speed_curve = 25.0   # 곡선 구간 속도 (m/s)
 current_speed = 30.0   # 현재 속도 (초기값)
 
 # 보간 밀도 설정
-interpolation_density_straight = 3   # 직선 구간: 1m당 점의 개수
-interpolation_density_curve = 10     # 곡선 구간: 1m당 점의 개수
+interpolation_density_straight = 2   # 직선 구간: 1m당 점의 개수
+interpolation_density_curve = 5     # 곡선 구간: 1m당 점의 개수
 
 # 수동 구간 경계 인덱스 설정 (waypoint 인덱스 기준)
 segment_boundary_indices = [16, 22, 29, 34]  # 이 배열을 수동으로 설정
 
 # 구간 전환 거리 임계값
-segment_transition_threshold = 0.4  # 전방주시거리에 추가할 거리 (m)
+segment_transition_threshold = 0.0  # 전방주시거리에 추가할 거리 (m)
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -280,7 +280,7 @@ class UTMPurePursuit(Node):
         self.yaw = 0.0
         
         # Waypoint 파일 경로 (수동 지정)
-        self.waypoints_file_path = "/home/daesun/mando_9_14/src/utm_coordinates.txt"  # 필요 시 이 경로를 수정하세요
+        self.waypoints_file_path = "/home/jh/ros2_workspace/src/utm_coordinates.txt"  # 필요 시 이 경로를 수정하세요
 
         # Waypoint 설정 (control.py의 goal과 유사)
         # Waypoint 설정: 단일 경로에서 로드
@@ -347,7 +347,7 @@ class UTMPurePursuit(Node):
         # 여러 경로에서 파일 찾기
         possible_paths = [
             "imu_calibration_angle.txt",  # 현재 디렉토리
-            "/home/daesun/mando_9_14/src/imu_calibration_angle.txt",  # 절대 경로
+            "/home/jh/ros2_workspace/src/imu_calibration_angle.txt",  # 절대 경로
             os.path.join(os.path.dirname(__file__), "imu_calibration_angle.txt"),  # 스크립트 디렉토리
             os.path.join(os.getcwd(), "imu_calibration_angle.txt")  # 작업 디렉토리
         ]
@@ -417,7 +417,6 @@ class UTMPurePursuit(Node):
         self.get_logger().info(f"   현재 위치 시작점: ({self.x:.3f}, {self.y:.3f})")
         self.get_logger().info(f"   종료점: ({self.waypoints[-1][0]:.3f}, {self.waypoints[-1][1]:.3f})")
         self.get_logger().info(f"   원본 구간 경계 인덱스: {self.segment_boundary_indices}")
-        self.get_logger().info(f"   조정된 구간 경계 인덱스: {adjusted_boundary_indices}")
         
         # 수동 구간 생성 (현재 위치를 포함한 전체 경로 기준)
         # 현재 위치를 시작점으로 하는 전체 경로 생성
@@ -426,6 +425,7 @@ class UTMPurePursuit(Node):
         
         # 구간 경계 인덱스를 현재 위치 포함 기준으로 조정
         adjusted_boundary_indices = [idx + 1 for idx in self.segment_boundary_indices]  # +1은 현재 위치 때문
+        self.get_logger().info(f"   조정된 구간 경계 인덱스: {adjusted_boundary_indices}")
         
         waypoint_segments = create_manual_segments(full_path_waypoints, adjusted_boundary_indices)
         
@@ -524,7 +524,7 @@ class UTMPurePursuit(Node):
         current_segment = self.path_segments[self.current_segment_index]
         
         # 현재 인덱스가 구간을 벗어났는지 확인
-        if self.i > current_segment['end_index']:
+        if self.i >= current_segment['end_index']:
             # 다음 구간으로 이동
             if self.current_segment_index < len(self.path_segments) - 1:
                 self.current_segment_index += 1

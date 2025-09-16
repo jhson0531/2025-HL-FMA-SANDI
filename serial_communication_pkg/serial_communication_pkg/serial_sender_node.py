@@ -59,10 +59,7 @@ def main(args=None):
       print("\n\nshutdown\n\n")
       steering = 0.0
       speed = 0.0
-      #left_speed = 0
-      #right_speed = 0
       message = PCFL.convert_serial_message(steering, speed)
-      #message = PCFL.convert_serial_message(steering, left_speed, right_speed)
       
       # 종료 시 시리얼 메시지 로그 출력
       print(f"🛑 종료 시 시리얼 전송: '{message.strip()}' (조향: {steering}°, 속도: {speed})")

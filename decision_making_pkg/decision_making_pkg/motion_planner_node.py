@@ -107,8 +107,8 @@ class MotionPlanningNode(Node):
                 self.speed_command = 0.0  # 전진/후진 속도 (m/s)
                 self.steering_command = 0.0 # 조향 각속도 (rad/s)
                 
-        self.get_logger().info(f"steering: {self.steering_command}, " 
-                               f"speed: {self.speed_command}")
+        #self.get_logger().info(f"steering: {self.steering_command}, " 
+        #                       f"speed: {self.speed_command}")
 
         # 모션 명령 메시지 생성 및 퍼블리시
         motion_command_msg = MotionCommand()

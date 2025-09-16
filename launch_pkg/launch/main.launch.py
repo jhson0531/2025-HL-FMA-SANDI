@@ -1,65 +1,60 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, ExecuteProcess, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
     return LaunchDescription([
-        # Node(
-        #     package='camera_perception_pkg',
-        #     executable='image_publisher_node',
-        #     name='image_publisher_node',
-        #     output='screen'
-        # ),
-        # Node(
-        #     package='camera_perception_pkg',
-        #     executable='yolov8_node',
-        #     name='yolov8_node',
-        #     output='screen'
-        # ),
-        # Node(
-        #     package='camera_perception_pkg',
-        #     executable='lane_info_extractor_node',
-        #     name='lane_info_extractor_node',
-        #     output='screen'
-        # ),
-        # Node(
-        #    package='camera_perception_pkg',
-        #    executable='traffic_light_detector_node',
-        #     name='traffic_light_detector_node',
-        #    output='screen'
-        # ),
-        # #Node(
-        # #    package='lidar_perception_pkg',
-        # #    executable='lidar_publisher_node',
-        # #    name='lidar_publisher_node',
-        # #    output='screen'
-        # #),"
-        # Node(
-        #     package='lidar_perception_pkg',
-        #     executable='lidar_processor_node',
-        #     name='lidar_processor_node',
-        #     output='screen'
-        # ),
-        # Node(
-        #     package='lidar_perception_pkg',
-        #     executable='lidar_obstacle_detector_node',
-        #     name='lidar_obstacle_detector_node',
-        #     output='screen'
-        # ),
-        Node(
-            package='decision_making_pkg',
-            executable='motion_planner_node',
-            name='motion_planner_node',
-            output='screen'
+        # 1단계: GPS-IMU 보정 노드 먼저 실행
+        ExecuteProcess(
+            cmd=['python3', '/home/jh/ros2_workspace/src/gps_imu_calibration.py'],
+            name='gps_imu_calibration',
+            output='screen',
+            on_exit=ExecuteProcess(
+                cmd=['bash', '-c', '''
+                    echo "GPS-IMU 보정 완료! 나머지 노드들을 시작합니다..."
+                    if [ -f "/home/daesun/mando_9_14/src/imu_calibration_angle.txt" ]; then
+                        echo "=== 보정 각도 정보 ==="
+                        head -2 /home/daesun/mando_9_14/src/imu_calibration_angle.txt
+                        echo "====================="
+                    else
+                        echo "보정 각도 파일을 찾을 수 없습니다."
+                    fi
+                '''],
+                output='screen'
+            )
         ),
-
-        Node(
-         package='serial_communication_pkg',
-            executable='serial_sender_node',
-            name='serial_sender_node',
-            output='screen'
-        )
+        
+        # 2단계: 보정 완료 후 5초 뒤에 나머지 노드들 실행
+        TimerAction(
+            period=2.0,
+            actions=[             
+                # Motion Planner 노드
+                Node(
+                    package='decision_making_pkg',
+                    executable='motion_planner_node',
+                    name='motion_planner_node',
+                    output='screen'
+                ),
+                
+                # Serial Sender 노드
+                Node(
+                    package='serial_communication_pkg',
+                    executable='serial_sender_node',
+                    name='serial_sender_node',
+                    output='screen'
+                ),
+                
+                # UTM Pure Pursuit 노드
+                # Node(
+                #     package='nav_controller',
+                #     executable='utm_pure_pursuit',
+                #     name='utm_pure_pursuit',
+                #     output='screen'
+                # ),
+                
+            ]
+        ),
     ])

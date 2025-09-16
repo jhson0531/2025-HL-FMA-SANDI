@@ -80,60 +80,60 @@ class _PoseListener(Node):
     def _gps_cb(self, msg: NavSatFix):
         # GPS 데이터 수신 비활성화 - waypoint와 보간된 경로만 표시
         pass
-        # global _robot_x, _robot_y, _robot_path_x, _robot_path_y, _robot_path_timestamps, _last_path_update, _heading_ref_set, _heading_ref_angle_rad
+        global _robot_x, _robot_y, _robot_path_x, _robot_path_y, _robot_path_timestamps, _last_path_update, _heading_ref_set, _heading_ref_angle_rad
         
-        # # GPS 좌표가 유효한지 확인
-        # #if msg.status.status < 0:  # STATUS_NO_FIX
-        # #    return
+        # GPS 좌표가 유효한지 확인
+        if msg.status.status < 0:  # STATUS_NO_FIX
+            return
             
-        # # lat, lon을 UTM으로 변환
-        # try:
-        #     utm_x, utm_y, zone_num, zone_letter = utm.from_latlon(msg.latitude, msg.longitude)
-        #     current_time = time.time()
+        # lat, lon을 UTM으로 변환
+        try:
+            utm_x, utm_y, zone_num, zone_letter = utm.from_latlon(msg.latitude, msg.longitude)
+            current_time = time.time()
             
-        #     with _robot_lock:
-        #         _robot_x = float(utm_x)
-        #         _robot_y = float(utm_y)
+            with _robot_lock:
+                _robot_x = float(utm_x)
+                _robot_y = float(utm_y)
                 
-        #         # 경로점 추가 (일정 간격으로)
-        #         if current_time - _last_path_update >= _path_update_interval:
-        #             _robot_path_x.append(_robot_x)
-        #             _robot_path_y.append(_robot_y)
-        #             _robot_path_timestamps.append(current_time)
-        #             _last_path_update = current_time
+                # 경로점 추가 (일정 간격으로)
+                if current_time - _last_path_update >= _path_update_interval:
+                    _robot_path_x.append(_robot_x)
+                    _robot_path_y.append(_robot_y)
+                    _robot_path_timestamps.append(current_time)
+                    _last_path_update = current_time
                     
-        #             # 경로점이 너무 많아지면 오래된 것부터 제거 (최대 1000개)
-        #             if len(_robot_path_x) > 1000:
-        #                 _robot_path_x.pop(0)
-        #                 _robot_path_y.pop(0)
-        #                 _robot_path_timestamps.pop(0)
-        #         # 초기 진행 방향 기준 설정 (최초 0.3m 이동 시)
-        #         if not _heading_ref_set and len(_robot_path_x) >= 2:
-        #             x0, y0 = _robot_path_x[0], _robot_path_y[0]
-        #             dx0 = _robot_x - x0
-        #             dy0 = _robot_y - y0
-        #             dist0 = math.hypot(dx0, dy0)
-        #             if dist0 >= 0.3:
-        #                 _heading_ref_angle_rad = math.atan2(dy0, dx0)
-        #                 _heading_ref_set = True
-        #                 self.get_logger().info(f"[Heading] 기준 각도 설정 완료: {_heading_ref_angle_rad:.3f} rad ({math.degrees(_heading_ref_angle_rad):.1f}°)")
-        # except Exception as e:
-        #     self.get_logger().warn(f"GPS to UTM 변환 오류: {e}")
+                    # 경로점이 너무 많아지면 오래된 것부터 제거 (최대 1000개)
+                    if len(_robot_path_x) > 1000:
+                        _robot_path_x.pop(0)
+                        _robot_path_y.pop(0)
+                        _robot_path_timestamps.pop(0)
+                # 초기 진행 방향 기준 설정 (최초 0.3m 이동 시)
+                if not _heading_ref_set and len(_robot_path_x) >= 2:
+                    x0, y0 = _robot_path_x[0], _robot_path_y[0]
+                    dx0 = _robot_x - x0
+                    dy0 = _robot_y - y0
+                    dist0 = math.hypot(dx0, dy0)
+                    if dist0 >= 0.3:
+                        _heading_ref_angle_rad = math.atan2(dy0, dx0)
+                        _heading_ref_set = True
+                        self.get_logger().info(f"[Heading] 기준 각도 설정 완료: {_heading_ref_angle_rad:.3f} rad ({math.degrees(_heading_ref_angle_rad):.1f}°)")
+        except Exception as e:
+            self.get_logger().warn(f"GPS to UTM 변환 오류: {e}")
 
     def _imu_cb(self, msg: Imu):
-        # IMU 데이터 수신 비활성화 - waypoint와 보간된 경로만 표시
+        # IMU 데이터 수신 
         pass
-        # global _imu_yaw_rad
-        # try:
-        #     yaw = _yaw_from_quaternion(
-        #         msg.orientation.x,
-        #         msg.orientation.y,
-        #         msg.orientation.z,
-        #         msg.orientation.w,
-        #     )
-        #     _imu_yaw_rad = _normalize_angle_rad(yaw)
-        # except Exception as e:
-        #     self.get_logger().warn(f"IMU yaw 파싱 오류: {e}")
+        global _imu_yaw_rad
+        try:
+            yaw = _yaw_from_quaternion(
+                msg.orientation.x,
+                msg.orientation.y,
+                msg.orientation.z,
+                msg.orientation.w,
+            )
+            _imu_yaw_rad = _normalize_angle_rad(yaw)
+        except Exception as e:
+            self.get_logger().warn(f"IMU yaw 파싱 오류: {e}")
 
     def _interpolated_path_cb(self, msg: PoseArray):
         """보간된 경로 데이터 처리"""
@@ -363,26 +363,26 @@ _interpolated_path_curve_plot = None
 def _update_robot_overlay():
     global _robot_plot, _robot_path_plot, _interpolated_path_plot, _interpolated_path_straight_plot, _interpolated_path_curve_plot, _heading_quiver, _heading_text
     with _robot_lock:
-        # GPS 관련 변수들 주석처리
-        # rx, ry = _robot_x, _robot_y
-        # path_x, path_y = _robot_path_x.copy(), _robot_path_y.copy()
+        # GPS 관련 변수들
+        rx, ry = _robot_x, _robot_y
+        path_x, path_y = _robot_path_x.copy(), _robot_path_y.copy()
         interp_x, interp_y = _interpolated_path_x.copy(), _interpolated_path_y.copy()
         interp_received = _interpolated_path_received
         segments = _path_segments.copy()
         path_length = _path_length
-        # imu_yaw = _imu_yaw_rad
-        # ref_set = _heading_ref_set
-        # ref_angle = _heading_ref_angle_rad
+        imu_yaw = _imu_yaw_rad
+        ref_set = _heading_ref_set
+        ref_angle = _heading_ref_angle_rad
     changed = False
     
-    # 로봇 경로 표시 비활성화
-    # if len(path_x) > 0:
-    #     if _robot_path_plot is None:
-    #         _robot_path_plot = ax.plot(path_x, path_y, 'b-', linewidth=1, alpha=0.7, label='Robot Path')[0]
-    #         changed = True
-    #     else:
-    #         _robot_path_plot.set_data(path_x, path_y)
-    #         changed = True
+    # 로봇 경로 표시 
+    if len(path_x) > 0:
+        if _robot_path_plot is None:
+            _robot_path_plot = ax.plot(path_x, path_y, 'b-', linewidth=1, alpha=0.7, label='Robot Path')[0]
+            changed = True
+        else:
+            _robot_path_plot.set_data(path_x, path_y)
+            changed = True
     
     # 보간된 경로 표시 (구간별로 구분)
     if interp_received and len(interp_x) > 0 and len(segments) > 0:
@@ -457,47 +457,47 @@ def _update_robot_overlay():
             _interpolated_path_plot.set_offsets(np.column_stack((interp_x, interp_y)))
             changed = True
     
-    # 현재 로봇 위치 표시 비활성화
-    # if rx is not None and ry is not None:
-    #     if _robot_plot is None:
-    #         _robot_plot = ax.plot(rx, ry, 'bo', markersize=8, label='Robot')[0]
-    #         changed = True
-    #     else:
-    #         _robot_plot.set_data([rx], [ry])
-    #         changed = True
-    #     # 헤딩 오버레이 (초기 0.3m 이동 방향을 0도로, IMU yaw 반영: 좌 +, 우 -)
-    #     if ref_set:
-    #         yaw = imu_yaw if imu_yaw is not None else 0.0
-    #         theta_world = ref_angle + yaw
-    #         dxh = math.cos(theta_world) * _heading_arrow_len
-    #         dyh = math.sin(theta_world) * _heading_arrow_len
-    #         if _heading_quiver is None:
-    #             _heading_quiver = ax.quiver([rx], [ry], [dxh], [dyh], angles='xy', scale_units='xy', scale=1, color='blue', width=0.003, label='Heading')
-    #             changed = True
-    #         else:
-    #             try:
-    #                 _heading_quiver.set_offsets(np.array([[rx, ry]]))
-    #                 _heading_quiver.set_UVC(np.array([dxh]), np.array([dyh]))
-    #             except Exception:
-    #                 # quiver 업데이트가 실패하면 재생성
-    #                 try:
-    #                     _heading_quiver.remove()
-    #                 except Exception:
-    #                     pass
-    #                 _heading_quiver = ax.quiver([rx], [ry], [dxh], [dyh], angles='xy', scale_units='xy', scale=1, color='blue', width=0.003, label='Heading')
-    #             changed = True
-    #         # 텍스트(도 단위, 좌 + / 우 -)
-    #         yaw_deg = math.degrees(yaw)
-    #         text_str = f"Heading {yaw_deg:+.1f}°"
-    #         tx = rx + dxh
-    #         ty = ry + dyh
-    #         if _heading_text is None:
-    #             _heading_text = ax.text(tx, ty, text_str, color='blue', fontsize=9, bbox=dict(boxstyle='round', fc='white', alpha=0.7))
-    #             changed = True
-    #         else:
-    #             _heading_text.set_position((tx, ty))
-    #             _heading_text.set_text(text_str)
-    #             changed = True
+    # 현재 로봇 위치 표시
+    if rx is not None and ry is not None:
+        if _robot_plot is None:
+            _robot_plot = ax.plot(rx, ry, 'bo', markersize=8, label='Robot')[0]
+            changed = True
+        else:
+            _robot_plot.set_data([rx], [ry])
+            changed = True
+        # 헤딩 오버레이 (초기 0.3m 이동 방향을 0도로, IMU yaw 반영: 좌 +, 우 -)
+        if ref_set:
+            yaw = imu_yaw if imu_yaw is not None else 0.0
+            theta_world = ref_angle + yaw
+            dxh = math.cos(theta_world) * _heading_arrow_len
+            dyh = math.sin(theta_world) * _heading_arrow_len
+            if _heading_quiver is None:
+                _heading_quiver = ax.quiver([rx], [ry], [dxh], [dyh], angles='xy', scale_units='xy', scale=1, color='blue', width=0.003, label='Heading')
+                changed = True
+            else:
+                try:
+                    _heading_quiver.set_offsets(np.array([[rx, ry]]))
+                    _heading_quiver.set_UVC(np.array([dxh]), np.array([dyh]))
+                except Exception:
+                    # quiver 업데이트가 실패하면 재생성
+                    try:
+                        _heading_quiver.remove()
+                    except Exception:
+                        pass
+                    _heading_quiver = ax.quiver([rx], [ry], [dxh], [dyh], angles='xy', scale_units='xy', scale=1, color='blue', width=0.003, label='Heading')
+                changed = True
+            # 텍스트(도 단위, 좌 + / 우 -)
+            yaw_deg = math.degrees(yaw)
+            text_str = f"Heading {yaw_deg:+.1f}°"
+            tx = rx + dxh
+            ty = ry + dyh
+            if _heading_text is None:
+                _heading_text = ax.text(tx, ty, text_str, color='blue', fontsize=9, bbox=dict(boxstyle='round', fc='white', alpha=0.7))
+                changed = True
+            else:
+                _heading_text.set_position((tx, ty))
+                _heading_text.set_text(text_str)
+                changed = True
     
     if changed:
         try:
