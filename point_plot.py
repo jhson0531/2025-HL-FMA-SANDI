@@ -170,9 +170,10 @@ class _PoseListener(Node):
             _path_length = segments_data.get('path_length', 0)
             self.get_logger().info(f"📡 구간 정보 수신: {len(_path_segments)}개 구간")
             
-            # 구간별 상세 정보 출력
+            # 구간별 상세 정보 출력 (version 정보 포함)
             for i, seg in enumerate(_path_segments):
-                self.get_logger().info(f"   구간 {i+1}: {seg['type']} (waypoint {seg['waypoint_start']}-{seg['waypoint_end']}, "
+                version = seg.get('version', 1)
+                self.get_logger().info(f"   구간 {i+1}: {seg['type']}{version} (waypoint {seg['waypoint_start']}-{seg['waypoint_end']}, "
                                      f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m)")
         except Exception as e:
             self.get_logger().warn(f"구간 정보 파싱 오류: {e}")
@@ -360,11 +361,10 @@ plt.tight_layout()
 _robot_plot = None
 _robot_path_plot = None
 _interpolated_path_plot = None
-_interpolated_path_straight_plot = None
-_interpolated_path_curve_plot = None
+_segment_plots = {}  # 동적으로 관리되는 구간별 플롯들
 
 def _update_robot_overlay():
-    global _robot_plot, _robot_path_plot, _interpolated_path_plot, _interpolated_path_straight_plot, _interpolated_path_curve_plot, _heading_quiver, _heading_text
+    global _robot_plot, _robot_path_plot, _interpolated_path_plot, _segment_plots, _heading_quiver, _heading_text
     with _robot_lock:
         # GPS 관련 변수들
         rx, ry = _robot_x, _robot_y
@@ -387,11 +387,19 @@ def _update_robot_overlay():
             _robot_path_plot.set_data(path_x, path_y)
             changed = True
     
-    # 보간된 경로 표시 (구간별로 구분)
+    # 보간된 경로 표시 (구간별로 구분 - s1-s5, c1-c3, r1-r2)
     if interp_received and len(interp_x) > 0 and len(segments) > 0:
-        # 직선 구간과 곡선 구간을 분리
-        straight_x, straight_y = [], []
-        curve_x, curve_y = [], []
+        # 세분화된 구간별로 분리
+        s1_x, s1_y = [], []  # 직선1
+        s2_x, s2_y = [], []  # 직선2
+        s3_x, s3_y = [], []  # 직선3
+        s4_x, s4_y = [], []  # 직선4
+        s5_x, s5_y = [], []  # 직선5
+        c1_x, c1_y = [], []  # 곡선1
+        c2_x, c2_y = [], []  # 곡선2
+        c3_x, c3_y = [], []  # 곡선3
+        r1_x, r1_y = [], []  # 후진1
+        r2_x, r2_y = [], []  # 후진2
         unclassified_x, unclassified_y = [], []
         
         # 모든 경로 점을 추적하기 위한 배열
@@ -401,6 +409,7 @@ def _update_robot_overlay():
             start_idx = segment['start_index']
             end_idx = segment['end_index']
             segment_type = segment['type']
+            version = segment.get('version', 1)  # version 정보 가져오기
             
             # 경로 인덱스가 유효한 범위인지 확인
             if start_idx < len(interp_x) and end_idx < len(interp_x) and start_idx <= end_idx:
@@ -408,12 +417,43 @@ def _update_robot_overlay():
                 start_idx = max(0, start_idx)
                 end_idx = min(len(interp_x) - 1, end_idx)
                 
+                segment_x = interp_x[start_idx:end_idx+1]
+                segment_y = interp_y[start_idx:end_idx+1]
+                
+                # 구간 타입과 version에 따라 분류
                 if segment_type == 'straight':
-                    straight_x.extend(interp_x[start_idx:end_idx+1])
-                    straight_y.extend(interp_y[start_idx:end_idx+1])
-                else:  # curve
-                    curve_x.extend(interp_x[start_idx:end_idx+1])
-                    curve_y.extend(interp_y[start_idx:end_idx+1])
+                    if version == 1:
+                        s1_x.extend(segment_x)
+                        s1_y.extend(segment_y)
+                    elif version == 2:
+                        s2_x.extend(segment_x)
+                        s2_y.extend(segment_y)
+                    elif version == 3:
+                        s3_x.extend(segment_x)
+                        s3_y.extend(segment_y)
+                    elif version == 4:
+                        s4_x.extend(segment_x)
+                        s4_y.extend(segment_y)
+                    elif version == 5:
+                        s5_x.extend(segment_x)
+                        s5_y.extend(segment_y)
+                elif segment_type == 'curve':
+                    if version == 1:
+                        c1_x.extend(segment_x)
+                        c1_y.extend(segment_y)
+                    elif version == 2:
+                        c2_x.extend(segment_x)
+                        c2_y.extend(segment_y)
+                    elif version == 3:
+                        c3_x.extend(segment_x)
+                        c3_y.extend(segment_y)
+                elif segment_type == 'reverse':
+                    if version == 1:
+                        r1_x.extend(segment_x)
+                        r1_y.extend(segment_y)
+                    elif version == 2:
+                        r2_x.extend(segment_x)
+                        r2_y.extend(segment_y)
                 
                 # 분류된 인덱스 기록
                 for i in range(start_idx, end_idx + 1):
@@ -425,23 +465,34 @@ def _update_robot_overlay():
                 unclassified_x.append(interp_x[i])
                 unclassified_y.append(interp_y[i])
         
-        # 직선 구간 표시 (파란색 점)
-        if len(straight_x) > 0:
-            if _interpolated_path_straight_plot is None:
-                _interpolated_path_straight_plot = ax.scatter(straight_x, straight_y, c='blue', s=8, alpha=0.8, label='Straight Segments')
-                changed = True
-            else:
-                _interpolated_path_straight_plot.set_offsets(np.column_stack((straight_x, straight_y)))
-                changed = True
+        # 각 구간별로 표시 (다른 색상과 크기 사용)
+        segment_plots = [
+            (s1_x, s1_y, 'blue', 8, 'S1 (Straight1)'),
+            (s2_x, s2_y, 'lightblue', 8, 'S2 (Straight2)'),
+            (s3_x, s3_y, 'cyan', 8, 'S3 (Straight3)'),
+            (s4_x, s4_y, 'teal', 8, 'S4 (Straight4)'),
+            (s5_x, s5_y, 'darkblue', 8, 'S5 (Straight5)'),
+            (c1_x, c1_y, 'red', 10, 'C1 (Curve1)'),
+            (c2_x, c2_y, 'orange', 10, 'C2 (Curve2)'),
+            (c3_x, c3_y, 'darkred', 10, 'C3 (Curve3)'),
+            (r1_x, r1_y, 'purple', 12, 'R1 (Reverse1)'),
+            (r2_x, r2_y, 'magenta', 12, 'R2 (Reverse2)')
+        ]
         
-        # 곡선 구간 표시 (빨간색 점)
-        if len(curve_x) > 0:
-            if _interpolated_path_curve_plot is None:
-                _interpolated_path_curve_plot = ax.scatter(curve_x, curve_y, c='red', s=8, alpha=0.8, label='Curve Segments')
-                changed = True
-            else:
-                _interpolated_path_curve_plot.set_offsets(np.column_stack((curve_x, curve_y)))
-                changed = True
+        # 기존 플롯 변수들 초기화 (동적으로 관리)
+        global _segment_plots
+        if '_segment_plots' not in globals():
+            _segment_plots = {}
+        
+        for i, (x_data, y_data, color, size, label) in enumerate(segment_plots):
+            if len(x_data) > 0:
+                plot_key = f'segment_{i}'
+                if plot_key not in _segment_plots:
+                    _segment_plots[plot_key] = ax.scatter(x_data, y_data, c=color, s=size, alpha=0.8, label=label)
+                    changed = True
+                else:
+                    _segment_plots[plot_key].set_offsets(np.column_stack((x_data, y_data)))
+                    changed = True
         
         # 분류되지 않은 구간 표시 (노란색 점)
         if len(unclassified_x) > 0:
