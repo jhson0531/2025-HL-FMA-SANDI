@@ -167,7 +167,7 @@ def create_manual_segments(waypoints, segment_config):
     return segments
 
 def segment_based_bspline_planning(waypoints, segments):
-    """구간별 B-Spline 경로 스무딩 (옛날 방식 - 구간별 개별 보간)"""
+    """구간별 B-Spline 경로 스무딩 (구간별 개별 보간)"""
     try:
         if len(waypoints) < 2:
             return [], []
@@ -216,7 +216,7 @@ def segment_based_bspline_planning(waypoints, segments):
             # 보간 점 수 계산
             interpolation_points = max(2, int(segment_distance * interpolation_density))
             
-            # B-Spline 스무딩 (옛날 방식)
+            # B-Spline 스무딩
             if len(segment_waypoints) >= 3:
                 x = np.array([wp[0] for wp in segment_waypoints])
                 y = np.array([wp[1] for wp in segment_waypoints])

@@ -225,7 +225,7 @@ class PathPublishingTest(Node):
         return segments
     
     def segment_based_bspline_planning(self, waypoints, segments):
-        """구간별 B-Spline 경로 스무딩 (옛날 방식 - 구간별 개별 보간)"""
+        """구간별 B-Spline 경로 스무딩 (구간별 개별 보간)"""
         try:
             if len(waypoints) < 2:
                 return [], []
@@ -233,11 +233,11 @@ class PathPublishingTest(Node):
             total_path = []
             path_segments = []
             
-            # 보간 밀도 설정
+            # 보간 밀도 설정 (원본 코드와 동일하게)
             interpolation_density_s1 = 2
-            interpolation_density_s2 = 5
+            interpolation_density_s2 = 2
             interpolation_density_s3 = 2
-            interpolation_density_s4 = 1
+            interpolation_density_s4 = 2
             interpolation_density_s5 = 2
             interpolation_density_c1 = 5
             interpolation_density_c2 = 5
@@ -286,7 +286,7 @@ class PathPublishingTest(Node):
                 # 보간 점 수 계산
                 interpolation_points = max(2, int(segment_distance * interpolation_density))
                 
-                # B-Spline 스무딩 (옛날 방식)
+                # B-Spline 스무딩
                 if len(segment_waypoints) >= 3:
                     x = np.array([wp[0] for wp in segment_waypoints])
                     y = np.array([wp[1] for wp in segment_waypoints])
