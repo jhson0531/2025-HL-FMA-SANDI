@@ -18,7 +18,7 @@ import os
 PUB_TOPIC_NAME = 'image_raw'
 
 # 데이터 입력 소스: 'camera', 'image', 또는 'video' 중 택1하여 입력
-DATA_SOURCE = 'video'
+DATA_SOURCE = 'image'
 
 # 카메라(웹캠) 장치 번호 (ls /dev/video* 명령을 터미널 창에 입력하여 확인)
 CAM_NUM = 0

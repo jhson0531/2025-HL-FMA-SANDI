@@ -18,6 +18,15 @@ try:
 except Exception:
     RCLPY_AVAILABLE = False
 
+# =============================================================================
+# 설정 섹션: 여기서 waypoint 파일 경로를 수정하세요
+# =============================================================================
+
+# 입력 waypoint 파일 경로
+INPUT_WAYPOINTS_FILE = 'src/remapped_t_turn.txt'  # 시각화할 waypoint 파일
+
+# =============================================================================
+
 # 한글 폰트 설정
 matplotlib.rcParams['font.family'] = 'Malgun Gothic'
 # 마이너스 부호 깨짐 방지
@@ -177,13 +186,7 @@ class _PoseListener(Node):
 
 # --- 수정된 부분 시작 ---
 # data_string 변수를 삭제하고, 파일에서 직접 데이터를 로드합니다.
-#input_filename = 'waypoints/remapped_wp.txt' # 전체(리매핑)
-#input_filename = 'waypoints/yongin_wp.txt'          # 원본
-#input_filename = 'waypoints/remapped_scurve.txt'    # s자 코스(리매핑)
-#input_filename = 'waypoints/remapped_rect.txt'       # 직각 코스(리매핑)
-#input_filename = 'waypoints/remapped_t_turn.txt'     # T 턴 코스(리매핑)
-#input_filename = 'waypoints/remapped_parking.txt'     # 주차 코스(리매핑)
-input_filename = 'utm_coordinates.txt'
+input_filename = INPUT_WAYPOINTS_FILE
 
 def _detect_delimiter_and_cols(path):
     delim = None

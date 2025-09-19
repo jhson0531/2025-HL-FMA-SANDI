@@ -55,12 +55,10 @@ class Yolov8Node(LifecycleNode):
         
         #---------------Variable Setting---------------
         # 딥러닝 모델 pt 파일명 작성
-        #self.declare_parameter("model", "yolov8m.pt")
-        self.declare_parameter("model", "best.pt")
+        self.declare_parameter("detection_model", "traffic_sign_detection.pt")  # traffic_sign detection용
         
         # 추론 하드웨어 선택 (cpu / gpu) 
-        self.declare_parameter("device", "cpu")
-        #self.declare_parameter("device", "cuda:0")
+        self.declare_parameter("device", "cuda:0")
         #----------------------------------------------
         
         self.declare_parameter("threshold", 0.5)
@@ -73,8 +71,8 @@ class Yolov8Node(LifecycleNode):
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f'Configuring {self.get_name()}')
 
-        self.model = self.get_parameter(
-            "model").get_parameter_value().string_value
+        self.detection_model = self.get_parameter(
+            "detection_model").get_parameter_value().string_value
 
         self.device = self.get_parameter(
             "device").get_parameter_value().string_value
@@ -114,13 +112,16 @@ class Yolov8Node(LifecycleNode):
         self.get_logger().info(f'Activating {self.get_name()}')
 
         try:
-            self.yolo = YOLO(self.model)  # 모델 로딩
-            self.yolo.fuse()
-        except FileNotFoundError:
-            self.get_logger().error(f"Error: Model file '{self.model}' not found!")
+            # Detection 모델 로딩 (traffic_sign용)
+            self.yolo_detection = YOLO(self.detection_model)
+            self.yolo_detection.fuse()
+            self.get_logger().info(f'Detection model loaded: {self.detection_model}')
+            
+        except FileNotFoundError as e:
+            self.get_logger().error(f"Error: Model file not found! {str(e)}")
             return TransitionCallbackReturn.FAILURE
         except Exception as e:
-            self.get_logger().error(f"Error while loading model '{self.model}': {str(e)}")
+            self.get_logger().error(f"Error while loading model: {str(e)}")
             return TransitionCallbackReturn.FAILURE
 
         # subs
@@ -141,7 +142,10 @@ class Yolov8Node(LifecycleNode):
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f'Deactivating {self.get_name()}')
 
-        del self.yolo
+        # 모델 삭제
+        if hasattr(self, 'yolo_detection'):
+            del self.yolo_detection
+            
         if 'cuda' in self.device:
             self.get_logger().info("Clearing CUDA cache")
             cuda.empty_cache()
@@ -164,7 +168,7 @@ class Yolov8Node(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
     
     # 무엇이 검출됐는지(label+확률) 를 리스트로 정리.
-    def parse_hypothesis(self, results: Results) -> List[Dict]:
+    def parse_hypothesis(self, results: Results, model) -> List[Dict]:
 
         hypothesis_list = []
 
@@ -172,7 +176,7 @@ class Yolov8Node(LifecycleNode):
         for box_data in results.boxes:
             hypothesis = {
                 "class_id": int(box_data.cls),
-                "class_name": self.yolo.names[int(box_data.cls)],
+                "class_name": model.names[int(box_data.cls)],
                 "score": float(box_data.conf)
             }
             hypothesis_list.append(hypothesis)
@@ -264,53 +268,40 @@ class Yolov8Node(LifecycleNode):
 
             # convert image + predict
             cv_image = self.cv_bridge.imgmsg_to_cv2(msg) # OpenCV 이미지로 변환 
-            results = self.yolo.predict( # YOLOv8 모델로 추론 
+            
+            # Detection 모델로 추론 (traffic_sign용)
+            detection_results = self.yolo_detection.predict(
                 source=cv_image,
                 verbose=False,
                 stream=False,
-                conf=self.threshold, # 지정한 신뢰도 이상만 추론 
-                device=self.device # cpu / gpu 선택
+                conf=self.threshold,
+                device=self.device
             )
-            results: Results = results[0].cpu() 
-
-            if results.boxes: # 박스 있으면 
-                hypothesis = self.parse_hypothesis(results) # 클래스 id/이름/점수 리스트 생성
-                boxes = self.parse_boxes(results) # 위치/크기를 담은 BoundingBox2D 리스트 생성
-
-            if results.masks: # 마스크(윤곽선) 있으면 
-                masks = self.parse_masks(results) # 세그멘테이션 결과(마스크)가 있으면 파싱해서 Mask 메시지 리스트로 변환 
-
-            if results.keypoints: # 키포인트 있으면
-                keypoints = self.parse_keypoints(results) #키포인트 결과가 있으면 파싱해서 KeyPoint2DArray 리스트로 변환.
+            detection_results: Results = detection_results[0].cpu()
 
             # create detection msgs
-            detections_msg = DetectionArray() # 최종 퍼블리시할 컨테이너 메세지 생성, 이 안에 여러개의 detection 메시지를 담김.
+            detections_msg = DetectionArray() # 최종 퍼블리시할 컨테이너 메세지 생성
 
-            for i in range(len(results)): # yolo가 검출한 객체만큼 반복해서 
-
-                aux_msg = Detection()
-
-                if results.boxes:
-                    aux_msg.class_id = hypothesis[i]["class_id"]
-                    aux_msg.class_name = hypothesis[i]["class_name"]
-                    aux_msg.score = hypothesis[i]["score"]
-
-                    aux_msg.bbox = boxes[i]
-
-                if results.masks:
-                    aux_msg.mask = masks[i]
-
-                if results.keypoints:
-                    aux_msg.keypoints = keypoints[i]
-
-                detections_msg.detections.append(aux_msg) # detection 메세지 완성해서 detectionArray에 추가.
+            # Detection 결과 처리 (traffic_sign)
+            if detection_results.boxes:
+                detection_hypothesis = self.parse_hypothesis(detection_results, self.yolo_detection)
+                detection_boxes = self.parse_boxes(detection_results)
+                
+                for i in range(len(detection_results.boxes)):
+                    aux_msg = Detection()
+                    aux_msg.class_id = detection_hypothesis[i]["class_id"]
+                    aux_msg.class_name = detection_hypothesis[i]["class_name"]
+                    aux_msg.score = detection_hypothesis[i]["score"]
+                    aux_msg.bbox = detection_boxes[i]
+                    detections_msg.detections.append(aux_msg)
 
             # publish detections
             detections_msg.header = msg.header # 원본 이미지의 헤더 정보 사용
-            self._pub.publish(detections_msg)  # 추론 결과를 detections 토픽으로 발행 (위에서 만든 함수)
+            self._pub.publish(detections_msg)  # 추론 결과를 detections 토픽으로 발행
 
-            del results
-            del cv_image # 메모리 정리.
+            # 메모리 정리
+            del detection_results
+            del cv_image
 
 
 def main():

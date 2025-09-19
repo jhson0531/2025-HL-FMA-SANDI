@@ -1,5 +1,3 @@
-#traffic_light_detector_node.py
-
 import cv2
 import random
 import numpy as np
@@ -51,35 +49,37 @@ class TrafficLightDetector(Node):
 
         self.detection_sub = Subscriber(self, DetectionArray, self.sub_detection_topic, qos_profile=self.qos_profile)
         self.image_sub = Subscriber(self, Image, self.sub_image_topic, qos_profile=self.qos_profile)
+        
+        # 동기화 객체를 생성. 이 객체는 [self.detection_sub, self.image_sub] 두 구독자에게 메시지가 도착하는 것을 감시
         self.ts = ApproximateTimeSynchronizer([self.detection_sub, self.image_sub], queue_size=1, slop=0.5)
         self.ts.registerCallback(self.sync_callback)
 
+        # 최종적으로 판별된 신호등 색상을 발행할 발행자를 생성
         self.publisher = self.create_publisher(String, self.pub_topic, self.qos_profile)
 
     def sync_callback(self, detection_msg: DetectionArray, image_msg: Image):
         cv_image = self.cv_bridge.imgmsg_to_cv2(image_msg)
         
+        # 신호등을 찾았는지 여부를 기록할 때 쓰는 플래그 변수
         traffic_light_detected = False
+        # detection_msg에 포함된 모든 탐지 객체들을 하나씩 순회
         for detection in detection_msg.detections:
-            if detection.class_name == 'traffic_light':
+            # 현재 순회중인 객체의 클래스 이름이 traffic_light인지 확인
+            if detection.class_name == 'left_arrow':
+                traffic_light_color = "Left_arrow"
+            elif detection.class_name == 'stop_sign':
+                traffic_light_color = "Stop"
+            else:
+                traffic_light_color = "Unknow"
 
-                hsv_ranges = {
-                    'red1': (np.array([0, 100, 95]), np.array([10, 255, 255])),
-                    'red2': (np.array([160, 100, 95]), np.array([179, 255, 255])),
-                    'yellow': (np.array([20, 100, 95]), np.array([30, 255, 255])),
-                    'green': (np.array([40, 100, 95]), np.array([90, 255, 255]))
-                }
-
-                # get_traffic_light_color -> Red, Yellow, Green, Unknown
-                traffic_light_color = CPFL.get_traffic_light_color(cv_image, detection.bbox, hsv_ranges) 
-                
-                # Publish traffic light color as string
-                color_msg = String()
-                color_msg.data = traffic_light_color
-                print(f'traffic light: {color_msg.data}') 
-                self.publisher.publish(color_msg)
-                traffic_light_detected = True
-                break  # Only process the first detected traffic light
+            # 발행할 String 객체를 생성. 
+            # Publish traffic light color as string
+            color_msg = String()
+            color_msg.data = traffic_light_color
+            print(f'traffic light: {color_msg.data}') 
+            self.publisher.publish(color_msg)
+            traffic_light_detected = True
+            break  # Only process the first detected traffic light
 
         if not traffic_light_detected:
             # Publish 'None' if no traffic light is detected
