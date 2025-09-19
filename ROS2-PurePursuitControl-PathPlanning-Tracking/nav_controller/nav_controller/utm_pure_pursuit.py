@@ -73,13 +73,13 @@ interpolation_density_r2 = 5   # 후진2 구간: 1m당 점의 개수
 # 구간타입: 's' (straight), 'c' (curve), 'r' (reverse)
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
 # 예: [[8, 's', 1], [16, 's', 2], [20, 'c', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]
-segment_config = [[8, 's', 1], [16, 's', 2], [20, 'c', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]  # 이 배열을 수동으로 설정
+segment_config = [[13, 's3', 1], [17, 's2', 2], [19, 's1', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]  # 이 배열을 수동으로 설정
 
 # 구간 전환 거리 임계값
 segment_transition_threshold = 0.0  # 전방주시거리에 추가할 거리 (m)
 
 # 경사로 대기 기능 설정
-slope_speed = 5.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)
+slope_speed = 25.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)
 slope_wait_time = 4.0  # 경사로에서 대기할 시간 (초)
 slope_waypoints = [10, 25]  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
 
@@ -167,7 +167,7 @@ def create_manual_segments(waypoints, segment_config):
     return segments
 
 def segment_based_bspline_planning(waypoints, segments):
-    """구간별 B-Spline 경로 스무딩"""
+    """구간별 B-Spline 경로 스무딩 (옛날 방식 - 구간별 개별 보간)"""
     try:
         if len(waypoints) < 2:
             return [], []
@@ -175,13 +175,21 @@ def segment_based_bspline_planning(waypoints, segments):
         total_path = []
         path_segments = []
         
-        for segment in segments:
+        # 구간별로 개별적으로 B-Spline 보간 (구간 간 연결점 포함)
+        for i, segment in enumerate(segments):
             start_wp = segment['waypoint_start']
             end_wp = segment['waypoint_end']
             segment_type = segment['type']
+            version = segment.get('version', 1)
             
-            # 구간별 waypoint 추출
-            segment_waypoints = waypoints[start_wp:end_wp+1]
+            # 구간별 waypoint 추출 (다음 구간의 시작점도 포함하여 연속성 보장)
+            if i < len(segments) - 1:
+                # 마지막 구간이 아니면 다음 구간의 시작점까지 포함
+                next_segment = segments[i + 1]
+                segment_waypoints = waypoints[start_wp:next_segment['waypoint_start'] + 1]
+            else:
+                # 마지막 구간이면 끝점까지 포함
+                segment_waypoints = waypoints[start_wp:end_wp + 1]
             
             if len(segment_waypoints) < 2:
                 continue
@@ -193,9 +201,7 @@ def segment_based_bspline_planning(waypoints, segments):
                                (segment_waypoints[i+1][1] - segment_waypoints[i][1])**2)
                 segment_distance += dist
             
-            # 구간별 보간 밀도 결정 (version 정보 사용)
-            version = segment.get('version', 1)
-            
+            # 구간별 보간 밀도 결정
             if segment_type == 'straight':
                 densities = [interpolation_density_s1, interpolation_density_s2, interpolation_density_s3, 
                            interpolation_density_s4, interpolation_density_s5]
@@ -210,7 +216,7 @@ def segment_based_bspline_planning(waypoints, segments):
             # 보간 점 수 계산
             interpolation_points = max(2, int(segment_distance * interpolation_density))
             
-            # B-Spline 스무딩
+            # B-Spline 스무딩 (옛날 방식)
             if len(segment_waypoints) >= 3:
                 x = np.array([wp[0] for wp in segment_waypoints])
                 y = np.array([wp[1] for wp in segment_waypoints])
@@ -241,14 +247,14 @@ def segment_based_bspline_planning(waypoints, segments):
             total_path.extend(segment_path)
             path_end_idx = len(total_path) - 1
             
-            # 경로 구간 정보 저장 (version 정보 포함)
+            # 경로 구간 정보 저장 (원래 구간 정보 유지)
             path_segments.append({
                 'type': segment_type,
-                'version': version,  # version 정보 추가
+                'version': version,
                 'start_index': path_start_idx,
                 'end_index': path_end_idx,
                 'waypoint_start': start_wp,
-                'waypoint_end': end_wp,
+                'waypoint_end': end_wp,  # 원래 구간 끝점 유지
                 'interpolation_density': interpolation_density,
                 'segment_distance': segment_distance
             })
