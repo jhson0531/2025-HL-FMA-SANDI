@@ -215,7 +215,7 @@ def segment_based_bspline_planning(waypoints, segments):
                 interpolation_density = densities[min(version - 1, 1)]
             
             # 보간 점 수 계산
-            interpolation_points = int(segment_distance * interpolation_density)
+            interpolation_points = max(2,round(segment_distance * interpolation_density))
             
             # B-Spline 스무딩
             if len(segment_waypoints) >= 3:
@@ -620,8 +620,15 @@ class UTMPurePursuit(Node):
         # 구간별 상세 정보 출력 (version 정보 포함)
         for i, seg in enumerate(self.path_segments):
             version = seg.get('version', 1)
+            path_points = seg['end_index'] - seg['start_index'] + 1
             self.get_logger().info(f"   구간 {i+1}: {seg['type']}{version} (waypoint {seg['waypoint_start']}-{seg['waypoint_end']}, "
-                                 f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m)")
+                                 f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m, 점수: {path_points}개)")
+        
+        # 보간 밀도 요약
+        self.get_logger().info("📊 보간 밀도 설정:")
+        self.get_logger().info(f"   직선: s1({interpolation_density_s1}/m) ~ s5({interpolation_density_s5}/m)")
+        self.get_logger().info(f"   곡선: c1({interpolation_density_c1}/m) ~ c3({interpolation_density_c3}/m)")
+        self.get_logger().info(f"   후진: r1({interpolation_density_r1}/m) ~ r2({interpolation_density_r2}/m)")
         
         return True
     
@@ -706,6 +713,8 @@ class UTMPurePursuit(Node):
                 self.get_logger().info(f"🔍 구간 전환 디버그: 현재 구간 {self.current_segment_index}/{len(self.path_segments)-1}")
                 self.get_logger().info(f"   현재 타입: {current_type}, 다음 타입: {next_segment_type}")
                 self.get_logger().info(f"   구간 끝까지 거리: {distance_to_segment_end:.2f}m")
+                if next_segment_type:
+                    self.get_logger().info(f"   전환 조건: {current_type} → {next_segment_type}")
                 self._last_debug_time = time.time()
         else:
             self._last_debug_time = time.time()
@@ -721,6 +730,14 @@ class UTMPurePursuit(Node):
             elif next_segment_type == 'reverse':
                 # 직선 → 후진
                 should_transition = distance_to_segment_end < 0.1
+            elif next_segment_type == 'straight':
+                # 직선 → 직선: 다음 직선 구간의 전방주시거리 기준
+                next_segment = self.get_next_segment()
+                next_version = next_segment.get('version', 1) if next_segment else 1
+                next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
+                                 lookahead_distance_s4, lookahead_distance_s5]
+                next_lookahead = next_lookaheads[min(next_version - 1, 4)]
+                should_transition = distance_to_segment_end < (next_lookahead ) 
         
         elif current_type == 'curve':
             if next_segment_type == 'straight':
@@ -730,10 +747,17 @@ class UTMPurePursuit(Node):
                 next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
                                  lookahead_distance_s4, lookahead_distance_s5]
                 next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < (next_lookahead + 0.5)  # 여유 거리 추가
+                should_transition = distance_to_segment_end < (next_lookahead)
             elif next_segment_type == 'reverse':
                 # 곡선 → 후진
-                should_transition = distance_to_segment_end < 0.5  # 여유 거리 추가
+                should_transition = distance_to_segment_end < 0.2  
+            elif next_segment_type == 'curve':
+                # 곡선 → 곡선: 다음 곡선 구간의 전방주시거리 기준
+                next_segment = self.get_next_segment()
+                next_version = next_segment.get('version', 1) if next_segment else 1
+                next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
+                next_lookahead = next_lookaheads[min(next_version - 1, 2)]
+                should_transition = distance_to_segment_end < (next_lookahead )
         
         elif current_type == 'reverse':
             if next_segment_type == 'straight':
@@ -743,16 +767,23 @@ class UTMPurePursuit(Node):
                 next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
                                  lookahead_distance_s4, lookahead_distance_s5]
                 next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < (next_lookahead + 0.5)  # 여유 거리 추가
+                should_transition = distance_to_segment_end < (next_lookahead )
             elif next_segment_type == 'curve':
                 # 후진 → 곡선: 다음 곡선 구간의 전방주시거리 기준
                 next_segment = self.get_next_segment()
                 next_version = next_segment.get('version', 1) if next_segment else 1
                 next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
                 next_lookahead = next_lookaheads[min(next_version - 1, 2)]
-                should_transition = distance_to_segment_end < (next_lookahead + 0.5)  # 여유 거리 추가
+                should_transition = distance_to_segment_end < (next_lookahead )
+            elif next_segment_type == 'reverse':
+                # 후진 → 후진: 다음 후진 구간의 전방주시거리 기준
+                next_segment = self.get_next_segment()
+                next_version = next_segment.get('version', 1) if next_segment else 1
+                next_lookaheads = [lookahead_distance_r1, lookahead_distance_r2]
+                next_lookahead = next_lookaheads[min(next_version - 1, 1)]
+                should_transition = distance_to_segment_end < (next_lookahead )
             else:
-                should_transition = distance_to_segment_end < 0.5  # 여유 거리 추가
+                should_transition = distance_to_segment_end < 0.2 
         
         # 구간 전환 실행
         if should_transition and self.get_next_segment() is not None:
