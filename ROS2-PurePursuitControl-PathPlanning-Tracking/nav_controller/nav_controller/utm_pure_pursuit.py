@@ -18,8 +18,8 @@ import re
 # 직선 구간 (1-5)
 lookahead_distance_s1 = 2.5  # 직선1 구간 전방주시거리 (미터)
 lookahead_distance_s2 = 4.0  # 직선2 구간 전방주시거리 (미터)
-lookahead_distance_s3 = 8.0  # 직선3 구간 전방주시거리 (미터)
-lookahead_distance_s4 = 4.0  # 직선4 구간 전방주시거리 (미터)
+lookahead_distance_s3 = 10.0  # 직선3 구간 전방주시거리 (미터)
+lookahead_distance_s4 = 6.0  # 직선4 구간 전방주시거리 (미터)
 lookahead_distance_s5 = 12.0  # 직선5 구간 전방주시거리 (미터)
 
 # 곡선 구간 (1-3)
@@ -55,9 +55,9 @@ current_speed = 30.0    # 현재 속도 (초기값)
 # 보간 밀도 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
 interpolation_density_s1 = 0.5   # 직선1 구간: 1m당 점의 개수
-interpolation_density_s2 = 0.35   # 직선2 구간: 1m당 점의 개수
-interpolation_density_s3 = 0.3   # 직선3 구간: 1m당 점의 개수
-interpolation_density_s4 = 0.4   # 직선4 구간: 1m당 점의 개수
+interpolation_density_s2 = 0.2   # 직선2 구간: 1m당 점의 개수
+interpolation_density_s3 = 0.2   # 직선3 구간: 1m당 점의 개수
+interpolation_density_s4 = 0.2   # 직선4 구간: 1m당 점의 개수
 interpolation_density_s5 = 0.5   # 직선5 구간: 1m당 점의 개수
 
 # 곡선 구간 (1-3)
@@ -74,15 +74,16 @@ interpolation_density_r2 = 5   # 후진2 구간: 1m당 점의 개수
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
 # 예: [[8, 's', 1], [16, 's', 2], [20, 'c', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]
 #segment_config = [[2, 's', 1],[5, 's', 3], [8, 's', 4], [9, 's', 2], [13, 's', 3], [17, 'c', 3], [39, 's', 3], [46, 'c', 3], [50, 's', 2], [59, 'c', 2], [62, 's', 2], [70, 'c', 2],[74, 's', 2], [83, 'c', 2], [87, 's', 3]]  # 이 배열을 수동으로 설정
-segment_config = [[2, 's', 1],[5, 's', 3], [8, 's', 4], [9, 's', 2], [13, 's', 3], [17, 'c', 3], [43, 's', 1]]
+segment_config = [[7, 's', 3], [8, 's', 4], [13, 's', 2], [17, 'c', 3], [43, 's', 1]]
 
 # 구간 전환 거리 임계값
 segment_transition_threshold = 0.0  # 전방주시거리에 추가할 거리 (m)
 
 # 경사로 대기 기능 설정
-slope_speed = 25.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)
+slope_speed = 22.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)
 slope_wait_time = 4.0  # 경사로에서 대기할 시간 (초)
 slope_waypoints = [8]  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
+slope_distance_threshold = 3.0  # 경사로 waypoint와의 거리 임계값 (m)
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -215,7 +216,7 @@ def segment_based_bspline_planning(waypoints, segments):
                 interpolation_density = densities[min(version - 1, 1)]
             
             # 보간 점 수 계산
-            interpolation_points = max(2,round(segment_distance * interpolation_density))
+            interpolation_points = max(1,round(segment_distance * interpolation_density))
             
             # B-Spline 스무딩
             if len(segment_waypoints) >= 3:
@@ -437,6 +438,7 @@ class UTMPurePursuit(Node):
         self.is_slope_waiting = False  # 경사로 대기 중인지 여부
         self.slope_wait_start_time = 0.0  # 경사로 대기 시작 시간
         self.slope_wait_waypoint_index = -1  # 경사로 대기 중인 waypoint 인덱스
+        self.slope_wait_completed = set()  # 완료된 경사로 대기 waypoint 인덱스들
         
         # 구간 설정 (인덱스별 타입 지정)
         self.segment_config = segment_config
@@ -481,6 +483,7 @@ class UTMPurePursuit(Node):
         self.get_logger().info("🎯 구간별 적응적 전방주시거리, 속도, 보간 기능이 활성화되었습니다.")
         self.get_logger().info("🛑 경사로 대기 기능이 활성화되었습니다:")
         self.get_logger().info(f"   대기 waypoint: {slope_waypoints}")
+        self.get_logger().info(f"   거리 임계값: {slope_distance_threshold}m")
         self.get_logger().info(f"   대기 시간: {slope_wait_time}초")
         self.get_logger().info(f"   최소 출력 속도: {slope_speed} m/s")
     
@@ -905,36 +908,44 @@ class UTMPurePursuit(Node):
         current_speed = (1 - speed_transition_rate) * current_speed + speed_transition_rate * target_speed
         current_lookahead_distance = target_lookahead  # 즉시 변경
     
-    def calculate_current_waypoint_index(self):
-        """현재 경로 인덱스를 기반으로 waypoint 인덱스 계산"""
-        if not self.path_segments:
-            return 0
-        
-        # 현재 경로 인덱스가 어느 구간에 속하는지 찾기
-        for i, segment in enumerate(self.path_segments):
-            if segment['start_index'] <= self.i <= segment['end_index']:
-                # 구간 내에서의 상대적 위치 계산
-                relative_pos = (self.i - segment['start_index']) / max(1, segment['end_index'] - segment['start_index'])
-                # waypoint 인덱스 계산 (구간의 시작 waypoint + 상대적 위치)
-                waypoint_idx = segment['waypoint_start'] + int(relative_pos * (segment['waypoint_end'] - segment['waypoint_start']))
-                return waypoint_idx
-        
-        return 0
-    
-    def should_start_slope_waiting(self, current_waypoint_idx):
-        """경사로 대기를 시작해야 하는지 확인"""
+    def should_start_slope_waiting(self):
+        """경사로 대기를 시작해야 하는지 확인 (거리 기반)"""
         if self.is_slope_waiting:
-            return False  # 이미 대기 중이면 시작하지 않음
+            return None  # 이미 대기 중이면 시작하지 않음
         
-        # 현재 waypoint가 경사로 대기 목록에 있는지 확인
-        return current_waypoint_idx in slope_waypoints
+        # 경사로 대기 waypoint들과의 거리 확인
+        for waypoint_idx in slope_waypoints:
+            if waypoint_idx in self.slope_wait_completed:
+                continue  # 이미 완료된 waypoint는 무시
+            
+            if waypoint_idx < len(self.waypoints):
+                waypoint = self.waypoints[waypoint_idx]
+                distance = math.hypot(self.x - waypoint[0], self.y - waypoint[1])
+                
+                # 디버깅 로그 (5초마다)
+                if hasattr(self, '_last_slope_debug_time'):
+                    if time.time() - self._last_slope_debug_time > 5.0:
+                        self.get_logger().info(f"🔍 경사로 대기 디버그: Waypoint {waypoint_idx}")
+                        self.get_logger().info(f"   현재 위치: ({self.x:.2f}, {self.y:.2f})")
+                        self.get_logger().info(f"   Waypoint 위치: ({waypoint[0]:.2f}, {waypoint[1]:.2f})")
+                        self.get_logger().info(f"   거리: {distance:.2f}m, 임계값: {slope_distance_threshold}m")
+                        self._last_slope_debug_time = time.time()
+                else:
+                    self._last_slope_debug_time = time.time()
+                
+                if distance <= slope_distance_threshold:
+                    return waypoint_idx  # 해당 waypoint 인덱스 반환
+        
+        return None  # 대기할 waypoint 없음
     
     def start_slope_waiting(self, waypoint_idx):
         """경사로 대기 시작"""
         self.is_slope_waiting = True
         self.slope_wait_start_time = time.time()
         self.slope_wait_waypoint_index = waypoint_idx
-        self.get_logger().info(f"🛑 경사로 대기 시작: Waypoint {waypoint_idx}에서 {slope_wait_time}초 대기")
+        waypoint = self.waypoints[waypoint_idx]
+        distance = math.hypot(self.x - waypoint[0], self.y - waypoint[1])
+        self.get_logger().info(f"🛑 경사로 대기 시작: Waypoint {waypoint_idx} (거리: {distance:.2f}m)에서 {slope_wait_time}초 대기")
         self.get_logger().info(f"   최소 출력 속도: {slope_speed} m/s")
     
     def handle_slope_waiting(self):
@@ -944,11 +955,14 @@ class UTMPurePursuit(Node):
         
         # 대기 시간이 지났는지 확인
         if elapsed_time >= slope_wait_time:
-            # 대기 완료
+            # 대기 완료 - 해당 waypoint를 완료 목록에 추가
+            completed_waypoint = self.slope_wait_waypoint_index
+            self.slope_wait_completed.add(completed_waypoint)
+            
             self.is_slope_waiting = False
             self.slope_wait_start_time = 0.0
             self.slope_wait_waypoint_index = -1
-            self.get_logger().info(f"✅ 경사로 대기 완료: {elapsed_time:.1f}초 대기 후 정상 주행 재개")
+            self.get_logger().info(f"✅ 경사로 대기 완료: Waypoint {completed_waypoint}에서 {elapsed_time:.1f}초 대기 후 정상 주행 재개")
             # 정상 주행을 위해 빈 twist 반환 (다음 루프에서 Pure Pursuit 실행)
             return Twist()
         
@@ -1054,21 +1068,20 @@ class UTMPurePursuit(Node):
             # 경사로 대기 로직 처리
             twist = Twist()
             
-            # 현재 waypoint 인덱스 계산 (전체 waypoint 기준)
-            current_waypoint_idx = self.calculate_current_waypoint_index()
-            
-            # 경사로 대기 체크
-            if self.should_start_slope_waiting(current_waypoint_idx):
-                self.start_slope_waiting(current_waypoint_idx)
-            
             # 경사로 대기 중인 경우
             if self.is_slope_waiting:
                 twist = self.handle_slope_waiting()
             else:
-                # 구간별 적응적 Pure Pursuit 제어 실행
-                twist.linear.x, twist.angular.z, self.i = pure_pursuit(
-                    self.x, self.y, self.yaw, self.path, self.i, current_segment
-                )
+                # 경사로 대기 체크 (거리 기반) - 대기 중이 아닐 때만
+                slope_waypoint_idx = self.should_start_slope_waiting()
+                if slope_waypoint_idx is not None:
+                    self.start_slope_waiting(slope_waypoint_idx)
+                    twist = self.handle_slope_waiting()  # 대기 시작 후 즉시 대기 처리
+                else:
+                    # 구간별 적응적 Pure Pursuit 제어 실행
+                    twist.linear.x, twist.angular.z, self.i = pure_pursuit(
+                        self.x, self.y, self.yaw, self.path, self.i, current_segment
+                    )
 
             distance_to_path_end = math.hypot(
                 self.x - self.path[-1][0], 
