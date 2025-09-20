@@ -23,7 +23,7 @@ except Exception:
 # =============================================================================
 
 # 입력 waypoint 파일 경로
-INPUT_WAYPOINTS_FILE = 'src/remapped_t_turn.txt'  # 시각화할 waypoint 파일
+INPUT_WAYPOINTS_FILE = 'waypoints/yongin_wp copy.txt'  # 시각화할 waypoint 파일
 
 # =============================================================================
 

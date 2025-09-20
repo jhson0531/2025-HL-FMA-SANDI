@@ -168,7 +168,7 @@ void autonomousControl() {
 // ===== 조종기 모드 제어 =====
 void rcControl() {
     read_rc_rx();        // CH1, CH2, CH3 and CH4 float variables will be calculated
-    speed_PWM = round(map(CH3, 0, 100, 0, 80));
+    speed_PWM = round(map(CH3, 0, 100, 0, 150));
     target_steering = round(map(CH1, 0, 100, 0, 1023));
     
     if (CH2 > 90) {

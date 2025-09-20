@@ -16,16 +16,16 @@ import re
 # Pure Pursuit 파라미터 (구간별 적응적 제어)
 # 전방주시거리 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
-lookahead_distance_s1 = 1.5  # 직선1 구간 전방주시거리 (미터)
-lookahead_distance_s2 = 1.4  # 직선2 구간 전방주시거리 (미터)
-lookahead_distance_s3 = 1.3  # 직선3 구간 전방주시거리 (미터)
-lookahead_distance_s4 = 1.2  # 직선4 구간 전방주시거리 (미터)
-lookahead_distance_s5 = 1.1  # 직선5 구간 전방주시거리 (미터)
+lookahead_distance_s1 = 2.5  # 직선1 구간 전방주시거리 (미터)
+lookahead_distance_s2 = 4.0  # 직선2 구간 전방주시거리 (미터)
+lookahead_distance_s3 = 8.0  # 직선3 구간 전방주시거리 (미터)
+lookahead_distance_s4 = 4.0  # 직선4 구간 전방주시거리 (미터)
+lookahead_distance_s5 = 12.0  # 직선5 구간 전방주시거리 (미터)
 
 # 곡선 구간 (1-3)
 lookahead_distance_c1 = 0.5  # 곡선1 구간 전방주시거리 (미터)
-lookahead_distance_c2 = 0.4  # 곡선2 구간 전방주시거리 (미터)
-lookahead_distance_c3 = 0.3  # 곡선3 구간 전방주시거리 (미터)
+lookahead_distance_c2 = 1.5  # 곡선2 구간 전방주시거리 (미터)
+lookahead_distance_c3 = 2.0  # 곡선3 구간 전방주시거리 (미터)
 
 # 후진 구간 (1-2)
 lookahead_distance_r1 = 0.8  # 후진1 구간 전방주시거리 (미터)
@@ -36,15 +36,15 @@ current_lookahead_distance = 0.3   # 현재 전방주시거리 (초기값)
 # 속도 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
 speed_s1 = 30.0   # 직선1 구간 속도 (m/s)
-speed_s2 = 28.0   # 직선2 구간 속도 (m/s)
-speed_s3 = 26.0   # 직선3 구간 속도 (m/s)
-speed_s4 = 24.0   # 직선4 구간 속도 (m/s)
-speed_s5 = 22.0   # 직선5 구간 속도 (m/s)
+speed_s2 = 40.0   # 직선2 구간 속도 (m/s) slope down
+speed_s3 = 70.0   # 직선3 구간 속도 (m/s) default
+speed_s4 = 60.0   # 직선4 구간 속도 (m/s) slope up
+speed_s5 = 120.0   # 직선5 구간 속도 (m/s)
 
 # 곡선 구간 (1-3)
-speed_c1 = 25.0   # 곡선1 구간 속도 (m/s)
-speed_c2 = 23.0   # 곡선2 구간 속도 (m/s)
-speed_c3 = 21.0   # 곡선3 구간 속도 (m/s)
+speed_c1 = 20.0   # 곡선1 구간 속도 (m/s)
+speed_c2 = 30.0   # 곡선2 구간 속도 (m/s)
+speed_c3 = 40.0   # 곡선3 구간 속도 (m/s)
 
 # 후진 구간 (1-2)
 speed_r1 = -20.0  # 후진1 구간 속도 (m/s, 음수)
@@ -54,16 +54,16 @@ current_speed = 30.0    # 현재 속도 (초기값)
 
 # 보간 밀도 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
-interpolation_density_s1 = 2   # 직선1 구간: 1m당 점의 개수
-interpolation_density_s2 = 2   # 직선2 구간: 1m당 점의 개수
-interpolation_density_s3 = 2   # 직선3 구간: 1m당 점의 개수
-interpolation_density_s4 = 2   # 직선4 구간: 1m당 점의 개수
-interpolation_density_s5 = 2   # 직선5 구간: 1m당 점의 개수
+interpolation_density_s1 = 0.5   # 직선1 구간: 1m당 점의 개수
+interpolation_density_s2 = 0.35   # 직선2 구간: 1m당 점의 개수
+interpolation_density_s3 = 0.3   # 직선3 구간: 1m당 점의 개수
+interpolation_density_s4 = 0.4   # 직선4 구간: 1m당 점의 개수
+interpolation_density_s5 = 0.5   # 직선5 구간: 1m당 점의 개수
 
 # 곡선 구간 (1-3)
 interpolation_density_c1 = 5   # 곡선1 구간: 1m당 점의 개수
-interpolation_density_c2 = 5   # 곡선2 구간: 1m당 점의 개수
-interpolation_density_c3 = 5   # 곡선3 구간: 1m당 점의 개수
+interpolation_density_c2 = 4   # 곡선2 구간: 1m당 점의 개수
+interpolation_density_c3 = 0.8   # 곡선3 구간: 1m당 점의 개수
 
 # 후진 구간 (1-2)
 interpolation_density_r1 = 5   # 후진1 구간: 1m당 점의 개수
@@ -73,7 +73,8 @@ interpolation_density_r2 = 5   # 후진2 구간: 1m당 점의 개수
 # 구간타입: 's' (straight), 'c' (curve), 'r' (reverse)
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
 # 예: [[8, 's', 1], [16, 's', 2], [20, 'c', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]
-segment_config = [[13, 's3', 1], [17, 's2', 2], [19, 's1', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]  # 이 배열을 수동으로 설정
+#segment_config = [[2, 's', 1],[5, 's', 3], [8, 's', 4], [9, 's', 2], [13, 's', 3], [17, 'c', 3], [39, 's', 3], [46, 'c', 3], [50, 's', 2], [59, 'c', 2], [62, 's', 2], [70, 'c', 2],[74, 's', 2], [83, 'c', 2], [87, 's', 3]]  # 이 배열을 수동으로 설정
+segment_config = [[2, 's', 1],[5, 's', 3], [8, 's', 4], [9, 's', 2], [13, 's', 3], [17, 'c', 3], [43, 's', 1]]
 
 # 구간 전환 거리 임계값
 segment_transition_threshold = 0.0  # 전방주시거리에 추가할 거리 (m)
@@ -81,7 +82,7 @@ segment_transition_threshold = 0.0  # 전방주시거리에 추가할 거리 (m)
 # 경사로 대기 기능 설정
 slope_speed = 25.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)
 slope_wait_time = 4.0  # 경사로에서 대기할 시간 (초)
-slope_waypoints = [10, 25]  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
+slope_waypoints = [8]  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -214,7 +215,7 @@ def segment_based_bspline_planning(waypoints, segments):
                 interpolation_density = densities[min(version - 1, 1)]
             
             # 보간 점 수 계산
-            interpolation_points = max(2, int(segment_distance * interpolation_density))
+            interpolation_points = int(segment_distance * interpolation_density)
             
             # B-Spline 스무딩
             if len(segment_waypoints) >= 3:
@@ -412,9 +413,9 @@ class UTMPurePursuit(Node):
         self.x = 0.0
         self.y = 0.0
         self.yaw = 0.0
-        
+    
         # Waypoint 파일 경로 (수동 지정)
-        self.waypoints_file_path = "/home/jh/ros2_workspace/src/utm_coordinates.txt"  # 필요 시 이 경로를 수정하세요
+        self.waypoints_file_path = "/home/jh/ros2_workspace/src/waypoints/yongin_wp copy.txt"  # 필요 시 이 경로를 수정하세요
 
         # Waypoint 설정 (control.py의 goal과 유사)
         # Waypoint 설정: 단일 경로에서 로드
@@ -699,6 +700,16 @@ class UTMPurePursuit(Node):
         # 구간 전환 조건 확인
         should_transition = False
         
+        # 디버깅용 로그 (5초마다)
+        if hasattr(self, '_last_debug_time'):
+            if time.time() - self._last_debug_time > 5.0:
+                self.get_logger().info(f"🔍 구간 전환 디버그: 현재 구간 {self.current_segment_index}/{len(self.path_segments)-1}")
+                self.get_logger().info(f"   현재 타입: {current_type}, 다음 타입: {next_segment_type}")
+                self.get_logger().info(f"   구간 끝까지 거리: {distance_to_segment_end:.2f}m")
+                self._last_debug_time = time.time()
+        else:
+            self._last_debug_time = time.time()
+        
         if current_type == 'straight':
             if next_segment_type == 'curve':
                 # 직선 → 곡선: 다음 곡선 구간의 전방주시거리 기준
@@ -719,10 +730,10 @@ class UTMPurePursuit(Node):
                 next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
                                  lookahead_distance_s4, lookahead_distance_s5]
                 next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < next_lookahead
+                should_transition = distance_to_segment_end < (next_lookahead + 0.5)  # 여유 거리 추가
             elif next_segment_type == 'reverse':
                 # 곡선 → 후진
-                should_transition = distance_to_segment_end < 0.1
+                should_transition = distance_to_segment_end < 0.5  # 여유 거리 추가
         
         elif current_type == 'reverse':
             if next_segment_type == 'straight':
@@ -732,16 +743,16 @@ class UTMPurePursuit(Node):
                 next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
                                  lookahead_distance_s4, lookahead_distance_s5]
                 next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < next_lookahead
+                should_transition = distance_to_segment_end < (next_lookahead + 0.5)  # 여유 거리 추가
             elif next_segment_type == 'curve':
                 # 후진 → 곡선: 다음 곡선 구간의 전방주시거리 기준
                 next_segment = self.get_next_segment()
                 next_version = next_segment.get('version', 1) if next_segment else 1
                 next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
                 next_lookahead = next_lookaheads[min(next_version - 1, 2)]
-                should_transition = distance_to_segment_end < next_lookahead
+                should_transition = distance_to_segment_end < (next_lookahead + 0.5)  # 여유 거리 추가
             else:
-                should_transition = distance_to_segment_end < 0.08
+                should_transition = distance_to_segment_end < 0.5  # 여유 거리 추가
         
         # 구간 전환 실행
         if should_transition and self.get_next_segment() is not None:
