@@ -55,7 +55,7 @@ class IahrsDriver(Node):
 
         self._reset_sensor()
 
-        self._imu_pub_handler = self.create_publisher(Imu, "/imu/data", 1)
+        self._imu_pub_handler = self.create_publisher(Imu, "/imu/data", 10)
         self.create_service(Set, "reset_sensor", self._reset_sensor_callback)
         self.create_service(Set, "reset_angle", self._reset_angle_callback)
         self.timer = self.create_timer(0.01, self._serial_timer)
@@ -167,7 +167,7 @@ class IahrsDriver(Node):
     def _reset_sensor(self):
         self._write_port("za")
         self._set_sync_port()  # USB/Serial
-        self._set_sync_period(10)  # 주기 10ms (100hz)
+        self._set_sync_period(50)  # 주기 10ms (100hz)
         self._set_sync_data(
             self.CONF_SYNC_LIN_ACC
             | self.CONF_SYNC_ANG_VEL

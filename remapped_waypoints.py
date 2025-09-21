@@ -10,7 +10,7 @@ from sensor_msgs.msg import Imu
 
 # 입력 파일 경로
 CALIBRATION_FILE = 'imu_calibration_angle.txt'  # 보정각 및 목표 좌표 파일
-INPUT_WAYPOINTS_FILE = 'waypoints/yongin_wp.txt'         # 원본 waypoint 파일
+INPUT_WAYPOINTS_FILE = 'waypoints/L_turn.txt'         # 원본 waypoint 파일
 
 # 출력 파일 경로
 OUTPUT_FILE = 'remapped_utmcoordinates.txt'    # 리매핑된 좌표 저장 파일
@@ -176,10 +176,16 @@ translation_vector = target_pos_0 - current_pos_0
 # 모든 회전된 점들에 동일한 이동량을 더해줌
 remapped_coords = rotated_coords + translation_vector
 
-# 5. 최종 데이터를 파일로 저장
-final_data = np.hstack((remapped_coords, original_yaw.reshape(-1, 1)))
+# 5. 첫 번째 waypoint 제거 후 최종 데이터를 파일로 저장
+# 첫 번째 waypoint 제거 (인덱스 0 제거)
+remapped_coords_without_first = remapped_coords[1:]
+original_yaw_without_first = original_yaw[1:]
+
+final_data = np.hstack((remapped_coords_without_first, original_yaw_without_first.reshape(-1, 1)))
 output_filename = OUTPUT_FILE
 np.savetxt(output_filename, final_data, fmt='%f', delimiter='  ')
 
 print(f"\n성공! 리매핑된 좌표가 '{output_filename}' 파일로 저장되었습니다.")
-print(f"새로운 0번째 점의 좌표: {remapped_coords[0]}")
+print(f"원본 waypoint 개수: {len(remapped_coords)}개")
+print(f"첫 번째 waypoint 제거 후: {len(remapped_coords_without_first)}개")
+print(f"새로운 0번째 점의 좌표: {remapped_coords_without_first[0]}")

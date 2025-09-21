@@ -57,9 +57,9 @@ class IMUYawConverter(Node):
             self.get_logger().info("-" * 70)
             self.first_imu_received = True
         
-        # 실시간 Yaw 각도 출력 (10Hz로 제한 - 0.1초마다)
+        # 실시간 Yaw 각도 출력 (100Hz = 10ms마다)
         current_time = self.get_clock().now()
-        if not hasattr(self, 'last_print_time') or (current_time - self.last_print_time).nanoseconds >= 1e8:
+        if not hasattr(self, 'last_print_time') or (current_time - self.last_print_time).nanoseconds >= 1e6:  # 10ms = 1e7 nanoseconds
             self.get_logger().info(f"Yaw: {yaw_deg:8.2f}° ({yaw_rad:8.6f} rad)")
             self.last_print_time = current_time
 

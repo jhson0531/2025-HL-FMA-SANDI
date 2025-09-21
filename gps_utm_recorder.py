@@ -30,7 +30,7 @@ class GPSUTMRecorder(Node):
         
         # 파일 저장 경로 (src 디렉토리)
         self.save_directory = "/home/jh/ros2_workspace/src"
-        self.coordinates_file = os.path.join(self.save_directory, "utm_coordinates.txt")
+        self.coordinates_file = os.path.join(self.save_directory, "human1.txt")
         
         # 파일 초기화 (기존 내용 삭제)
         self.initialize_coordinates_file()

@@ -181,7 +181,7 @@ class GPSIMUCalibration(Node):
         """계산된 각도를 txt 파일에 저장"""
         try:
             # 읽기 쉬운 형식으로 저장
-            filename = "imu_calibration_angle.txt"
+            filename = "src/imu_calibration_angle.txt"
             
             with open(filename, 'w') as f:
                 # 첫 번째 줄: 보정각도 (라디안 단위)

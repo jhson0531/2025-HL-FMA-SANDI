@@ -30,7 +30,8 @@ setup(
         	'utm_test_publisher = nav_controller.utm_test_publisher:main',
         	'pure_pursuit_visualizer = nav_controller.pure_pursuit_visualizer:main',
         	'simple_visualizer = nav_controller.simple_visualizer:main',
-        	'path_generation_test = nav_controller.path_generation_test:main'
+        	'path_generation_test = nav_controller.path_generation_test:main',
+        	'pure_pursuit = nav_controller.pure_pursuit:main'
         ],
     },
 )

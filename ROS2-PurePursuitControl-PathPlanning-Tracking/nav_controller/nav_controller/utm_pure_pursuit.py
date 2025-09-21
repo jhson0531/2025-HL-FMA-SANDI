@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 import math
-import scipy.interpolate as si
+# import scipy.interpolate as si  # 보간 사용하지 않으므로 주석 처리
 from sensor_msgs.msg import NavSatFix, Imu
 from geometry_msgs.msg import Twist, PoseArray, Pose
 from std_msgs.msg import String
@@ -16,73 +16,71 @@ import re
 # Pure Pursuit 파라미터 (구간별 적응적 제어)
 # 전방주시거리 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
-lookahead_distance_s1 = 2.5  # 직선1 구간 전방주시거리 (미터)
-lookahead_distance_s2 = 4.0  # 직선2 구간 전방주시거리 (미터)
-lookahead_distance_s3 = 10.0  # 직선3 구간 전방주시거리 (미터)
-lookahead_distance_s4 = 6.0  # 직선4 구간 전방주시거리 (미터)
-lookahead_distance_s5 = 12.0  # 직선5 구간 전방주시거리 (미터)
+lookahead_distance_s1 = 0.5  # 직선1 구간 전방주시거리 (미터) parking
+lookahead_distance_s2 = 1.5  # 직선2 구간 전방주시거리 (미터) downhill
+lookahead_distance_s3 = 1.5  # 직선3 구간 전방주시거리 (미터) uphill
+lookahead_distance_s4 = 1.5  # 직선4 구간 전방주시거리 (미터) default
+lookahead_distance_s5 = 4.0  # 직선5 구간 전방주시거리 (미터) fast
 
 # 곡선 구간 (1-3)
-lookahead_distance_c1 = 0.5  # 곡선1 구간 전방주시거리 (미터)
-lookahead_distance_c2 = 1.5  # 곡선2 구간 전방주시거리 (미터)
-lookahead_distance_c3 = 2.0  # 곡선3 구간 전방주시거리 (미터)
+lookahead_distance_c1 = 0.5  # 곡선1 구간 전방주시거리 (미터) parking
+lookahead_distance_c2 = 0.8  # 곡선2 구간 전방주시거리 (미터) default
+lookahead_distance_c3 = 0.8  # 곡선3 구간 전방주시거리 (미터)
 
 # 후진 구간 (1-2)
-lookahead_distance_r1 = 0.8  # 후진1 구간 전방주시거리 (미터)
-lookahead_distance_r2 = 0.7  # 후진2 구간 전방주시거리 (미터)
+lookahead_distance_r1 = 0.3  # 후진1 구간 전방주시거리 (미터) default
+lookahead_distance_r2 = 0.6  # 후진2 구간 전방주시거리 (미터) slow
 
 current_lookahead_distance = 0.3   # 현재 전방주시거리 (초기값)
 
 # 속도 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
-speed_s1 = 30.0   # 직선1 구간 속도 (m/s)
-speed_s2 = 40.0   # 직선2 구간 속도 (m/s) slope down
-speed_s3 = 70.0   # 직선3 구간 속도 (m/s) default
-speed_s4 = 60.0   # 직선4 구간 속도 (m/s) slope up
-speed_s5 = 120.0   # 직선5 구간 속도 (m/s)
+speed_s1 = 35.0   # 직선1 구간 속도 (m/s)
+speed_s2 = 40.0   # 직선2 구간 속도 (m/s) 
+speed_s3 = 55.0   # 직선3 구간 속도 (m/s) 
+speed_s4 = 70.0   # 직선4 구간 속도 (m/s) 
+speed_s5 = 100.0   # 직선5 구간 속도 (m/s)
 
 # 곡선 구간 (1-3)
-speed_c1 = 20.0   # 곡선1 구간 속도 (m/s)
-speed_c2 = 30.0   # 곡선2 구간 속도 (m/s)
-speed_c3 = 40.0   # 곡선3 구간 속도 (m/s)
+speed_c1 = 35.0   # 곡선1 구간 속도 (m/s)
+speed_c2 = 60.0   # 곡선2 구간 속도 (m/s)
+speed_c3 = 60.0   # 곡선3 구간 속도 (m/s)
 
 # 후진 구간 (1-2)
-speed_r1 = -20.0  # 후진1 구간 속도 (m/s, 음수)
-speed_r2 = -18.0  # 후진2 구간 속도 (m/s, 음수)
+speed_r1 = -30.0  # 후진1 구간 속도 (m/s, 음수)
+speed_r2 = -50.0  # 후진2 구간 속도 (m/s, 음수)
 
 current_speed = 30.0    # 현재 속도 (초기값)
 
-# 보간 밀도 설정 (세분화된 구간별)
-# 직선 구간 (1-5)
-interpolation_density_s1 = 0.5   # 직선1 구간: 1m당 점의 개수
-interpolation_density_s2 = 0.2   # 직선2 구간: 1m당 점의 개수
-interpolation_density_s3 = 0.2   # 직선3 구간: 1m당 점의 개수
-interpolation_density_s4 = 0.2   # 직선4 구간: 1m당 점의 개수
-interpolation_density_s5 = 0.5   # 직선5 구간: 1m당 점의 개수
 
-# 곡선 구간 (1-3)
-interpolation_density_c1 = 5   # 곡선1 구간: 1m당 점의 개수
-interpolation_density_c2 = 4   # 곡선2 구간: 1m당 점의 개수
-interpolation_density_c3 = 0.8   # 곡선3 구간: 1m당 점의 개수
-
-# 후진 구간 (1-2)
-interpolation_density_r1 = 5   # 후진1 구간: 1m당 점의 개수
-interpolation_density_r2 = 5   # 후진2 구간: 1m당 점의 개수
 
 # 구간 설정: [인덱스, 구간타입, 버전] 형태로 설정
 # 구간타입: 's' (straight), 'c' (curve), 'r' (reverse)
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
-# 예: [[8, 's', 1], [16, 's', 2], [20, 'c', 1], [25, 'r', 1], [30, 'c', 2], [35, 's', 3], [43, 'c', 3]]
-#segment_config = [[2, 's', 1],[5, 's', 3], [8, 's', 4], [9, 's', 2], [13, 's', 3], [17, 'c', 3], [39, 's', 3], [46, 'c', 3], [50, 's', 2], [59, 'c', 2], [62, 's', 2], [70, 'c', 2],[74, 's', 2], [83, 'c', 2], [87, 's', 3]]  # 이 배열을 수동으로 설정
-segment_config = [[7, 's', 3], [8, 's', 4], [13, 's', 2], [17, 'c', 3], [43, 's', 1]]
+# segment_config = [[13, 's', 4], [16, 's', 1], [38, 'r', 2], [43, 'r', 1], [49, 's', 1], [60, 'c', 3], [63, 's', '4']]   # T - parking 
+segment_config = [[6, 's', 4], [9, 's', 1], [15, 'r', 1], [26, 'r', 2], [36, 'r', 1], [40, 's', 1], [48, 'c', 1], [58, 'c', 3], [61, 's', '4']]   # ll - parking 
 
-# 구간 전환 거리 임계값
-segment_transition_threshold = 0.0  # 전방주시거리에 추가할 거리 (m)
+
+# 구간 전환 거리 임계값 (다음 구간 타입별)
+segment_transition_distances = {
+    'straight_to_curve': 1.0,    # 직선 → 곡선
+    'straight_to_reverse': 0.1,  # 직선 → 후진
+
+    'curve_to_straight': 0.5,    # 곡선 → 직선
+    'curve_to_reverse': 0.1,     # 곡선 → 후진
+
+    'reverse_to_straight': 0.1,  # 후진 → 직선
+    'reverse_to_curve': 0.1,     # 후진 → 곡선
+
+    'straight_to_straight': 1.0, # 직선 → 직선
+    'curve_to_curve': 0.5,       # 곡선 → 곡선
+    'reverse_to_reverse': 0.1    # 후진 → 후진
+}
 
 # 경사로 대기 기능 설정
-slope_speed = 22.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)
+slope_speed = 0.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)   -> 22.0
 slope_wait_time = 4.0  # 경사로에서 대기할 시간 (초)
-slope_waypoints = [8]  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
+slope_waypoints = []  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
 slope_distance_threshold = 3.0  # 경사로 waypoint와의 거리 임계값 (m)
 
 def euler_from_quaternion(x, y, z, w):
@@ -168,102 +166,44 @@ def create_manual_segments(waypoints, segment_config):
     
     return segments
 
-def segment_based_bspline_planning(waypoints, segments):
-    """구간별 B-Spline 경로 스무딩 (구간별 개별 보간)"""
+def create_path_from_waypoints(waypoints, segments):
+    """waypoint를 그대로 path로 사용"""
     try:
         if len(waypoints) < 2:
             return [], []
         
-        total_path = []
+        # waypoint를 그대로 path로 사용
+        total_path = waypoints.copy()
         path_segments = []
         
-        # 구간별로 개별적으로 B-Spline 보간 (구간 간 연결점 포함)
-        for i, segment in enumerate(segments):
+        for segment in segments:
             start_wp = segment['waypoint_start']
             end_wp = segment['waypoint_end']
             segment_type = segment['type']
             version = segment.get('version', 1)
             
-            # 구간별 waypoint 추출 (다음 구간의 시작점도 포함하여 연속성 보장)
-            if i < len(segments) - 1:
-                # 마지막 구간이 아니면 다음 구간의 시작점까지 포함
-                next_segment = segments[i + 1]
-                segment_waypoints = waypoints[start_wp:next_segment['waypoint_start'] + 1]
-            else:
-                # 마지막 구간이면 끝점까지 포함
-                segment_waypoints = waypoints[start_wp:end_wp + 1]
-            
-            if len(segment_waypoints) < 2:
-                continue
-            
             # 구간별 거리 계산
             segment_distance = 0.0
-            for i in range(len(segment_waypoints) - 1):
-                dist = math.sqrt((segment_waypoints[i+1][0] - segment_waypoints[i][0])**2 + 
-                               (segment_waypoints[i+1][1] - segment_waypoints[i][1])**2)
-                segment_distance += dist
+            for i in range(start_wp, end_wp):
+                if i + 1 < len(waypoints):
+                    dist = math.sqrt((waypoints[i+1][0] - waypoints[i][0])**2 + 
+                                   (waypoints[i+1][1] - waypoints[i][1])**2)
+                    segment_distance += dist
             
-            # 구간별 보간 밀도 결정
-            if segment_type == 'straight':
-                densities = [interpolation_density_s1, interpolation_density_s2, interpolation_density_s3, 
-                           interpolation_density_s4, interpolation_density_s5]
-                interpolation_density = densities[min(version - 1, 4)]
-            elif segment_type == 'curve':
-                densities = [interpolation_density_c1, interpolation_density_c2, interpolation_density_c3]
-                interpolation_density = densities[min(version - 1, 2)]
-            else:  # reverse
-                densities = [interpolation_density_r1, interpolation_density_r2]
-                interpolation_density = densities[min(version - 1, 1)]
-            
-            # 보간 점 수 계산
-            interpolation_points = max(1,round(segment_distance * interpolation_density))
-            
-            # B-Spline 스무딩
-            if len(segment_waypoints) >= 3:
-                x = np.array([wp[0] for wp in segment_waypoints])
-                y = np.array([wp[1] for wp in segment_waypoints])
-                
-                N = min(2, len(x) - 1)  # 차수는 점의 개수에 따라 조정
-                t = range(len(x))
-                x_tup = si.splrep(t, x, k=N)
-                y_tup = si.splrep(t, y, k=N)
-
-                x_list = list(x_tup)
-                xl = x.tolist()
-                x_list[1] = xl + [0.0] * (N + 1)
-
-                y_list = list(y_tup)
-                yl = y.tolist()
-                y_list[1] = yl + [0.0] * (N + 1)
-
-                ipl_t = np.linspace(0.0, len(x) - 1, interpolation_points)
-                rx = si.splev(ipl_t, x_list)
-                ry = si.splev(ipl_t, y_list)
-                segment_path = [(rx[i], ry[i]) for i in range(len(rx))]
-            else:
-                # 점이 2개뿐이면 선형 보간
-                segment_path = segment_waypoints
-            
-            # 전체 경로에 추가
-            path_start_idx = len(total_path)
-            total_path.extend(segment_path)
-            path_end_idx = len(total_path) - 1
-            
-            # 경로 구간 정보 저장 (원래 구간 정보 유지)
+            # 경로 구간 정보 저장 (waypoint 인덱스와 동일)
             path_segments.append({
                 'type': segment_type,
                 'version': version,
-                'start_index': path_start_idx,
-                'end_index': path_end_idx,
+                'start_index': start_wp,
+                'end_index': end_wp,
                 'waypoint_start': start_wp,
-                'waypoint_end': end_wp,  # 원래 구간 끝점 유지
-                'interpolation_density': interpolation_density,
+                'waypoint_end': end_wp,
                 'segment_distance': segment_distance
             })
         
         return total_path, path_segments
     except Exception as e:
-        print(f"구간별 보간 오류: {e}")
+        print(f"경로 생성 오류: {e}")
         return waypoints, []
 
 def pure_pursuit(current_x, current_y, current_heading, path, index, current_segment_info=None):
@@ -480,7 +420,10 @@ class UTMPurePursuit(Node):
         for i, wp in enumerate(self.waypoints):
             self.get_logger().info(f"  Waypoint {i+1}: ({wp[0]:.3f}, {wp[1]:.3f})")
         self.get_logger().info("📡 GPS 및 IMU 데이터 수신 후 자동으로 추적을 시작합니다...")
-        self.get_logger().info("🎯 구간별 적응적 전방주시거리, 속도, 보간 기능이 활성화되었습니다.")
+        self.get_logger().info("🎯 구간별 적응적 전방주시거리, 속도 기능이 활성화되었습니다.")
+        self.get_logger().info("🔄 구간 전환 거리 설정:")
+        for key, distance in segment_transition_distances.items():
+            self.get_logger().info(f"   {key}: {distance}m")
         self.get_logger().info("🛑 경사로 대기 기능이 활성화되었습니다:")
         self.get_logger().info(f"   대기 waypoint: {slope_waypoints}")
         self.get_logger().info(f"   거리 임계값: {slope_distance_threshold}m")
@@ -559,34 +502,23 @@ class UTMPurePursuit(Node):
             return False
         
         
-        self.get_logger().info("🗺️ 수동 구간 기반 경로 생성 중...")
+        self.get_logger().info("🗺️ 구간별 경로 생성 중...")
         self.get_logger().info(f"   총 waypoint: {len(self.waypoints)}개")
-        self.get_logger().info(f"   현재 위치 시작점: ({self.x:.3f}, {self.y:.3f})")
+        self.get_logger().info(f"   시작점: ({self.waypoints[0][0]:.3f}, {self.waypoints[0][1]:.3f})")
         self.get_logger().info(f"   종료점: ({self.waypoints[-1][0]:.3f}, {self.waypoints[-1][1]:.3f})")
-        self.get_logger().info(f"   원본 구간 설정: {self.segment_config}")
+        self.get_logger().info(f"   구간 설정: {self.segment_config}")
         
-        # 수동 구간 생성 (현재 위치를 포함한 전체 경로 기준)
-        # 현재 위치를 시작점으로 하는 전체 경로 생성
-        full_path_waypoints = [(self.x, self.y)]  # 현재 위치를 시작점으로
-        full_path_waypoints.extend(self.waypoints)  # 모든 waypoint 추가
+        # 수동 구간 생성 (waypoint만 사용)
+        # waypoint를 그대로 경로로 사용
+        full_path_waypoints = self.waypoints.copy()
         
-        # 구간 설정을 현재 위치 포함 기준으로 조정 (인덱스 +1)
-        adjusted_segment_config = []
-        for config_item in self.segment_config:
-            if len(config_item) == 3:
-                # [인덱스, 구간타입, 버전] 형식
-                idx, seg_type, version = config_item
-                adjusted_segment_config.append([idx + 1, seg_type, version])  # +1은 현재 위치 때문
-            else:
-                # [인덱스, 구간타입] 형식 (하위 호환성)
-                idx, seg_type = config_item
-                adjusted_segment_config.append([idx + 1, seg_type])  # +1은 현재 위치 때문
-        self.get_logger().info(f"   조정된 구간 설정: {adjusted_segment_config}")
+        # 구간 설정은 그대로 사용 (현재 위치 추가하지 않음)
+        self.get_logger().info(f"   구간 설정: {self.segment_config}")
         
-        waypoint_segments = create_manual_segments(full_path_waypoints, adjusted_segment_config)
+        waypoint_segments = create_manual_segments(full_path_waypoints, self.segment_config)
         
-        # 구간별 보간으로 경로 생성 (현재 위치 포함)
-        self.path, self.path_segments = segment_based_bspline_planning(full_path_waypoints, waypoint_segments)
+        # waypoint로부터 경로 생성
+        self.path, self.path_segments = create_path_from_waypoints(full_path_waypoints, waypoint_segments)
         
         # 총 거리 계산 (현재 위치 포함한 전체 경로 기준)
         total_distance = 0.0
@@ -600,18 +532,18 @@ class UTMPurePursuit(Node):
         curve_segments = sum(1 for seg in self.path_segments if seg['type'] == 'curve')
         reverse_segments = sum(1 for seg in self.path_segments if seg['type'] == 'reverse')
 
-        # 보간된 경로를 ROS2 토픽으로 발행
+        # 경로를 ROS2 토픽으로 발행
         self.publish_interpolated_path()
         
         # 구간 정보를 ROS2 토픽으로 발행
         self.publish_path_segments()
         
-        self.get_logger().info("✅ 수동 구간 기반 경로 생성 완료!")
-        self.get_logger().info(f"   스무딩된 경로점: {len(self.path)}개")
+        self.get_logger().info("✅ 구간별 경로 생성 완료!")
+        self.get_logger().info(f"   경로점: {len(self.path)}개 (waypoint 그대로 사용)")
         self.get_logger().info(f"   총 거리: {total_distance:.2f}m")
-        self.get_logger().info(f"   직선 구간: {straight_segments}개 (s1-s5 버전별 보간 밀도)")
-        self.get_logger().info(f"   곡선 구간: {curve_segments}개 (c1-c3 버전별 보간 밀도)")
-        self.get_logger().info(f"   후진 구간: {reverse_segments}개 (r1-r2 버전별 보간 밀도)")
+        self.get_logger().info(f"   직선 구간: {straight_segments}개")
+        self.get_logger().info(f"   곡선 구간: {curve_segments}개")
+        self.get_logger().info(f"   후진 구간: {reverse_segments}개")
         self.get_logger().info(f"   직선 전방주시거리: s1({lookahead_distance_s1}m) ~ s5({lookahead_distance_s5}m)")
         self.get_logger().info(f"   곡선 전방주시거리: c1({lookahead_distance_c1}m) ~ c3({lookahead_distance_c3}m)")
         self.get_logger().info(f"   후진 전방주시거리: r1({lookahead_distance_r1}m) ~ r2({lookahead_distance_r2}m)")
@@ -623,21 +555,14 @@ class UTMPurePursuit(Node):
         # 구간별 상세 정보 출력 (version 정보 포함)
         for i, seg in enumerate(self.path_segments):
             version = seg.get('version', 1)
-            path_points = seg['end_index'] - seg['start_index'] + 1
             self.get_logger().info(f"   구간 {i+1}: {seg['type']}{version} (waypoint {seg['waypoint_start']}-{seg['waypoint_end']}, "
-                                 f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m, 점수: {path_points}개)")
-        
-        # 보간 밀도 요약
-        self.get_logger().info("📊 보간 밀도 설정:")
-        self.get_logger().info(f"   직선: s1({interpolation_density_s1}/m) ~ s5({interpolation_density_s5}/m)")
-        self.get_logger().info(f"   곡선: c1({interpolation_density_c1}/m) ~ c3({interpolation_density_c3}/m)")
-        self.get_logger().info(f"   후진: r1({interpolation_density_r1}/m) ~ r2({interpolation_density_r2}/m)")
+                                 f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m)")
         
         return True
     
 
     def publish_interpolated_path(self):
-        """보간된 경로를 PoseArray 메시지로 발행"""
+        """경로를 PoseArray 메시지로 발행"""
         if not self.path:
             return
             
@@ -655,7 +580,7 @@ class UTMPurePursuit(Node):
             pose_array.poses.append(pose)
         
         self.path_publisher.publish(pose_array)
-        self.get_logger().info(f"📡 보간된 경로 발행: {len(self.path)}개 점")
+        self.get_logger().info(f"📡 경로 발행: {len(self.path)}개 점")
     
     def publish_path_segments(self):
         """구간 정보를 JSON 형태로 발행"""
@@ -664,20 +589,17 @@ class UTMPurePursuit(Node):
         
         import json
         
-        # 총 경로 거리 계산 (현재 위치 포함한 전체 경로 기준)
-        full_path_waypoints = [(self.x, self.y)]  # 현재 위치를 시작점으로
-        full_path_waypoints.extend(self.waypoints)  # 모든 waypoint 추가
-        
+        # 총 경로 거리 계산
         total_distance = 0.0
-        for i in range(len(full_path_waypoints) - 1):
-            dist = math.sqrt((full_path_waypoints[i+1][0] - full_path_waypoints[i][0])**2 + 
-                           (full_path_waypoints[i+1][1] - full_path_waypoints[i][1])**2)
+        for i in range(len(self.waypoints) - 1):
+            dist = math.sqrt((self.waypoints[i+1][0] - self.waypoints[i][0])**2 + 
+                           (self.waypoints[i+1][1] - self.waypoints[i][1])**2)
             total_distance += dist
         
         segments_data = {
             'segments': self.path_segments,
             'path_length': total_distance,
-            'total_waypoints': len(full_path_waypoints),  # 현재 위치 포함한 전체 waypoint 수
+            'total_waypoints': len(self.waypoints),
             'total_path_points': len(self.path)
         }
         
@@ -709,6 +631,7 @@ class UTMPurePursuit(Node):
         
         # 구간 전환 조건 확인
         should_transition = False
+        transition_distance = 0.0
         
         # 디버깅용 로그 (5초마다)
         if hasattr(self, '_last_debug_time'):
@@ -722,71 +645,20 @@ class UTMPurePursuit(Node):
         else:
             self._last_debug_time = time.time()
         
-        if current_type == 'straight':
-            if next_segment_type == 'curve':
-                # 직선 → 곡선: 다음 곡선 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
-                next_lookahead = next_lookaheads[min(next_version - 1, 2)]
-                should_transition = distance_to_segment_end <= next_lookahead
-            elif next_segment_type == 'reverse':
-                # 직선 → 후진
-                should_transition = distance_to_segment_end < 0.1
-            elif next_segment_type == 'straight':
-                # 직선 → 직선: 다음 직선 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
-                                 lookahead_distance_s4, lookahead_distance_s5]
-                next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < (next_lookahead ) 
+        # 다음 구간이 없으면 전환하지 않음
+        if next_segment_type is None:
+            return current_segment
         
-        elif current_type == 'curve':
-            if next_segment_type == 'straight':
-                # 곡선 → 직선: 다음 직선 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
-                                 lookahead_distance_s4, lookahead_distance_s5]
-                next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < (next_lookahead)
-            elif next_segment_type == 'reverse':
-                # 곡선 → 후진
-                should_transition = distance_to_segment_end < 0.2  
-            elif next_segment_type == 'curve':
-                # 곡선 → 곡선: 다음 곡선 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
-                next_lookahead = next_lookaheads[min(next_version - 1, 2)]
-                should_transition = distance_to_segment_end < (next_lookahead )
+        # 구간 전환 거리 임계값 결정
+        transition_key = f"{current_type}_to_{next_segment_type}"
+        if transition_key in segment_transition_distances:
+            transition_distance = segment_transition_distances[transition_key]
+        else:
+            # 기본값 (혹시 모를 경우)
+            transition_distance = 0.5
         
-        elif current_type == 'reverse':
-            if next_segment_type == 'straight':
-                # 후진 → 직선: 다음 직선 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_s1, lookahead_distance_s2, lookahead_distance_s3, 
-                                 lookahead_distance_s4, lookahead_distance_s5]
-                next_lookahead = next_lookaheads[min(next_version - 1, 4)]
-                should_transition = distance_to_segment_end < (next_lookahead )
-            elif next_segment_type == 'curve':
-                # 후진 → 곡선: 다음 곡선 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
-                next_lookahead = next_lookaheads[min(next_version - 1, 2)]
-                should_transition = distance_to_segment_end < (next_lookahead )
-            elif next_segment_type == 'reverse':
-                # 후진 → 후진: 다음 후진 구간의 전방주시거리 기준
-                next_segment = self.get_next_segment()
-                next_version = next_segment.get('version', 1) if next_segment else 1
-                next_lookaheads = [lookahead_distance_r1, lookahead_distance_r2]
-                next_lookahead = next_lookaheads[min(next_version - 1, 1)]
-                should_transition = distance_to_segment_end < (next_lookahead )
-            else:
-                should_transition = distance_to_segment_end < 0.2 
+        # 거리 기반 구간 전환 판정
+        should_transition = distance_to_segment_end <= transition_distance
         
         # 구간 전환 실행
         if should_transition and self.get_next_segment() is not None:
@@ -803,6 +675,9 @@ class UTMPurePursuit(Node):
             new_version = new_segment.get('version', 1)
             
             self.get_logger().info(f"🔄 구간 전환: {current_type_name}{current_version} → {new_type_name}{new_version}")
+            self.get_logger().info(f"   현재 위치: ({self.x:.3f}, {self.y:.3f})")
+            self.get_logger().info(f"   현재 구간 끝점: ({segment_end_point[0]:.3f}, {segment_end_point[1]:.3f})")
+            self.get_logger().info(f"   거리: {distance_to_segment_end:.3f}m, 전환 기준: {transition_distance:.3f}m")
             self.get_logger().info(f"   구간: {new_segment['start_index']}-{new_segment['end_index']}")
             return new_segment
         
@@ -834,18 +709,7 @@ class UTMPurePursuit(Node):
             return
         
         segment_type = current_segment['type']
-        segment_end_index = current_segment['end_index']
-        
-        # 현재 위치에서 구간 끝점까지의 거리
-        if segment_end_index < len(self.path):
-            segment_end_point = self.path[segment_end_index]
-            distance_to_segment_end = math.hypot(
-                self.x - segment_end_point[0], 
-                self.y - segment_end_point[1]
-            )
-        else:
-            distance_to_segment_end = 0
-        
+
         if segment_type == 'straight':
             # 직선 구간 - version별 파라미터 사용
             version = current_segment.get('version', 1)
@@ -855,23 +719,6 @@ class UTMPurePursuit(Node):
             target_speed = speeds[min(version - 1, 4)]
             target_lookahead = lookaheads[min(version - 1, 4)]
             
-            # 구간 끝에 가까워지면 속도를 점진적으로 감소
-            if distance_to_segment_end < (target_lookahead + segment_transition_threshold):
-                next_segment_type = self.get_next_segment_type()
-                if next_segment_type == 'curve':
-                    # 다음 곡선 구간의 version을 가져와서 전방주시거리 결정
-                    next_segment = self.get_next_segment()
-                    next_version = next_segment.get('version', 1) if next_segment else 1
-                    next_lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
-                    next_lookahead = next_lookaheads[min(next_version - 1, 2)]
-                    
-                    transition_ratio = (distance_to_segment_end - next_lookahead) / (target_lookahead + segment_transition_threshold)
-                    target_speed = target_speed * transition_ratio
-                elif next_segment_type == 'reverse':
-                    # 후진 전에는 속도를 0으로 감소
-                    transition_ratio = distance_to_segment_end / (target_lookahead + segment_transition_threshold)
-                    target_speed = target_speed * transition_ratio
-        
         elif segment_type == 'curve':
             # 곡선 구간 - version별 파라미터 사용
             version = current_segment.get('version', 1)
@@ -879,14 +726,6 @@ class UTMPurePursuit(Node):
             lookaheads = [lookahead_distance_c1, lookahead_distance_c2, lookahead_distance_c3]
             target_speed = speeds[min(version - 1, 2)]
             target_lookahead = lookaheads[min(version - 1, 2)]
-            
-            if distance_to_segment_end < (target_lookahead + segment_transition_threshold):
-                # 구간 끝에 가까워짐
-                next_segment_type = self.get_next_segment_type()
-                if next_segment_type == 'reverse':
-                    # 후진 전에는 속도를 0으로 감소
-                    transition_ratio = distance_to_segment_end / (target_lookahead + segment_transition_threshold)
-                    target_speed = target_speed * transition_ratio
         
         else:  # reverse
             # 후진 구간 - version별 파라미터 사용
@@ -895,18 +734,10 @@ class UTMPurePursuit(Node):
             lookaheads = [lookahead_distance_r1, lookahead_distance_r2]
             target_speed = speeds[min(version - 1, 1)]
             target_lookahead = lookaheads[min(version - 1, 1)]
-            
-            # 후진 구간에서 다음 구간으로 전환 시
-            if distance_to_segment_end < (target_lookahead + segment_transition_threshold):
-                # 구간 끝에 가까워짐
-                transition_ratio = distance_to_segment_end / (target_lookahead + segment_transition_threshold)
-                target_speed = target_speed * transition_ratio
         
-        # 속도는 부드러운 전환, 전방주시거리는 즉시 변경
-        speed_transition_rate = 0.2  #20%씩 변화
-        
-        current_speed = (1 - speed_transition_rate) * current_speed + speed_transition_rate * target_speed
-        current_lookahead_distance = target_lookahead  # 즉시 변경
+        # 속도와 전방주시거리 모두 즉시 변경
+        current_speed = target_speed
+        current_lookahead_distance = target_lookahead
     
     def should_start_slope_waiting(self):
         """경사로 대기를 시작해야 하는지 확인 (거리 기반)"""
