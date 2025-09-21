@@ -9,6 +9,7 @@ Description: 스위치로 자율주행 모드(0)와 조종기 모드(1)를 전�
 #include <CytronMotorDriver.h>
 #include <math.h>
 #include "rc_rx.h"
+#include <Encoder.h>
 
 // ===== 핀 매핑 =====
 const int FORWARD_1  = 4;
@@ -17,8 +18,8 @@ const int BACKWARD_1 = 6;
 const int BACKWARD_2 = 7;
 const int STEERING_1 = 8;
 const int STEERING_2 = 9;
-const uint8_t ENCODER_A = 14;
-const uint8_t ENCODER_B = 15;
+const uint8_t ENCODER_A = 20;
+const uint8_t ENCODER_B = 21;
 const int POT_PIN = A0;
 const int MODE_SWITCH_PIN = 30;  // 모드 전환 스위치 핀
 
@@ -38,6 +39,26 @@ float target_angle_deg = 0;
 int speed_PWM = 0;
 int target_steering = 512;
 int direction = 1;
+
+// ── 엔코더 객체
+Encoder encoder(ENCODER_A, ENCODER_B);
+
+// RPM 제어 변수
+float target_rpm = 0.0;  // 목표 RPM
+float current_rpm = 0.0; // 현재 RPM
+long last_encoder_ticks = 0;
+unsigned long last_rpm_time = 0;
+const int ENCODER_PPR = 300; // 엔코더 Pulses Per Revolution (회전당 펄스 수)
+
+// PID 제어 변수
+float pid_kp = 1.0;  // 비례 게인
+float pid_ki = 0.1;  // 적분 게인
+float pid_kd = 0.05; // 미분 게인
+float pid_error = 0.0;
+float pid_last_error = 0.0;
+float pid_integral = 0.0;
+float pid_derivative = 0.0;
+float pid_output = 0.0;
 
 // 모드 변수
 bool autonomous_mode = true;  // true: 자율주행 모드, false: 조종기 모드
@@ -103,11 +124,66 @@ void processData(const char *data);
 void checkModeSwitch();
 void autonomousControl();
 void rcControl();
+float calculateRPM();
+int calculatePIDOutput(float target, float current);
 
 // ===== 구동 모터 설정 =====
 void setMotorSpeed(int spd) {
     FORWARD.setSpeed(spd);
     BACKWARD.setSpeed(spd);
+}
+
+// ===== RPM 계산 함수 =====
+float calculateRPM() {
+    unsigned long current_time = millis();
+    long current_ticks = encoder.read();
+    
+    if (last_rpm_time == 0) {
+        last_rpm_time = current_time;
+        last_encoder_ticks = current_ticks;
+        return 0.0;
+    }
+    
+    unsigned long time_diff = current_time - last_rpm_time;
+    if (time_diff < 50) { // 최소 50ms 간격으로만 계산
+        return current_rpm;
+    }
+    
+    long tick_diff = current_ticks - last_encoder_ticks;
+    
+    // RPM 계산: (tick_diff / ENCODER_PPR) * (60000 / time_diff)
+    float rpm = (float)tick_diff / ENCODER_PPR * 60000.0 / time_diff;
+    
+    last_rpm_time = current_time;
+    last_encoder_ticks = current_ticks;
+    
+    return rpm;
+}
+
+// ===== PID 제어 함수 =====
+int calculatePIDOutput(float target, float current) {
+    pid_error = target - current;
+    
+    // 적분 항 계산
+    pid_integral += pid_error;
+    
+    // 적분 항 제한 (윈드업 방지)
+    if (pid_integral > 100) pid_integral = 100;
+    if (pid_integral < -100) pid_integral = -100;
+    
+    // 미분 항 계산
+    pid_derivative = pid_error - pid_last_error;
+    
+    // PID 출력 계산
+    pid_output = pid_kp * pid_error + pid_ki * pid_integral + pid_kd * pid_derivative;
+    
+    // 출력 제한 (-255 ~ 255)
+    if (pid_output > 255) pid_output = 255;
+    if (pid_output < -255) pid_output = -255;
+    
+    pid_last_error = pid_error;
+    
+    return (int)pid_output;
 }
 
 // ===== 모드 스위치 확인 =====
@@ -157,8 +233,14 @@ void autonomousControl() {
             STEERING.setSpeed(-STEERING_SPEED);
         }
         
+        // 현재 RPM 계산
+        current_rpm = calculateRPM();
+        
+        // PID 제어로 모터 속도 계산
+        int motor_speed = calculatePIDOutput(target_rpm, current_rpm);
+        
         // 모터 속도 설정
-        setMotorSpeed(speed_cmd);
+        setMotorSpeed(motor_speed);
         
         // 마지막 명령 시간 갱신
         lastCommandTime = currentTime;
@@ -231,14 +313,22 @@ void processData(const char *data) {
     }
     if (sIndex != -1 && pIndex != -1 && pIndex > sIndex) {
         float newTargetAngle = atof(data + sIndex + 1);
-        int   newSpeed       = atoi(data + pIndex + 1);
+        float newTargetRPM   = atof(data + pIndex + 1);  // p 값은 이제 RPM으로 해석
         
         // 캘리브레이션 데이터의 최대/최소 각도로 제한
         if (newTargetAngle > 25.0) newTargetAngle = 25.0;
         if (newTargetAngle < -25.0) newTargetAngle = -25.0;
 
+        // RPM 제한 (예: -1000 ~ 1000 RPM)
+        if (newTargetRPM > 1000.0) newTargetRPM = 1000.0;
+        if (newTargetRPM < -1000.0) newTargetRPM = -1000.0;
+
         target_angle_deg = newTargetAngle;
-        speed_cmd        = newSpeed;
+        target_rpm       = newTargetRPM;
+        
+        // PID 적분 항 리셋 (새로운 목표값 설정 시)
+        pid_integral = 0.0;
+        pid_last_error = 0.0;
     }
 }
 
@@ -275,5 +365,33 @@ void loop() {
     const unsigned long period = 1000UL / LOOP_HZ;
     if (currentTime - last_pub >= period) {
         last_pub = currentTime;
+        long ticks = encoder.read();
+        int potRaw = analogRead(POT_PIN);
+        
+        if (autonomous_mode) {
+            // 자율주행 모드: 조향각, 목표 RPM, 현재 RPM, PID 출력 포함
+            Serial.print("T,");
+            Serial.print(currentTime);
+            Serial.print(",");
+            Serial.print(ticks);
+            Serial.print(",");
+            Serial.print(potRaw);
+            Serial.print(",");
+            Serial.print(target_angle_deg);
+            Serial.print(",");
+            Serial.print(target_rpm);
+            Serial.print(",");
+            Serial.print(current_rpm);
+            Serial.print(",");
+            Serial.println(pid_output);
+        } else {
+            // 조종기 모드: 기존 형식 유지
+            Serial.print("T,");
+            Serial.print(currentTime);
+            Serial.print(",");
+            Serial.print(ticks);
+            Serial.print(",");
+            Serial.println(potRaw);
+        }
     }
 }
