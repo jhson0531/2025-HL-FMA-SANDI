@@ -10,6 +10,7 @@ Description: 스위치로 자율주행 모드(0)와 조종기 모드(1)를 전�
 #include <math.h>
 #include "rc_rx.h"
 #include <Encoder.h>
+#define PI = 3.1415926535897932
 
 // ===== 핀 매핑 =====
 const int FORWARD_1  = 4;
@@ -52,8 +53,8 @@ const int ENCODER_PPR = 300; // 엔코더 Pulses Per Revolution (회전당 펄�
 
 // PID 제어 변수
 float pid_kp = 1.0;  // 비례 게인
-float pid_ki = 0.1;  // 적분 게인
-float pid_kd = 0.05; // 미분 게인
+float pid_ki = 0.0;  // 적분 게인
+float pid_kd = 0.0; // 미분 게인
 float pid_error = 0.0;
 float pid_last_error = 0.0;
 float pid_integral = 0.0;
@@ -313,7 +314,7 @@ void processData(const char *data) {
     }
     if (sIndex != -1 && pIndex != -1 && pIndex > sIndex) {
         float newTargetAngle = atof(data + sIndex + 1);
-        float newTargetRPM   = atof(data + pIndex + 1);  // p 값은 이제 RPM으로 해석
+        float newTargetRPM   = round(atof(data + pIndex + 1) * 60 /(PI * 0.265)) ;  // p 값은 이제 RPM으로 해석
         
         // 캘리브레이션 데이터의 최대/최소 각도로 제한
         if (newTargetAngle > 25.0) newTargetAngle = 25.0;
