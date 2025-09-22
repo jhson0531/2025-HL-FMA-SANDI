@@ -6,6 +6,7 @@ import math
 from sensor_msgs.msg import NavSatFix, Imu
 from geometry_msgs.msg import Twist, PoseArray, Pose
 from std_msgs.msg import String
+from std_msgs.msg import Bool
 import time
 import matplotlib.pyplot as plt
 from matplotlib import patches, transforms
@@ -28,8 +29,8 @@ lookahead_distance_c2 = 0.8  # 곡선2 구간 전방주시거리 (미터) defaul
 lookahead_distance_c3 = 0.8  # 곡선3 구간 전방주시거리 (미터)
 
 # 후진 구간 (1-2)
-lookahead_distance_r1 = 0.3  # 후진1 구간 전방주시거리 (미터) default
-lookahead_distance_r2 = 0.6  # 후진2 구간 전방주시거리 (미터) slow
+lookahead_distance_r1 = 1.0  # 후진1 구간 전방주시거리 (미터) default
+lookahead_distance_r2 = 1.3  # 후진2 구간 전방주시거리 (미터) slow
 
 current_lookahead_distance = 0.3   # 현재 전방주시거리 (초기값)
 
@@ -47,41 +48,62 @@ speed_c2 = 60.0   # 곡선2 구간 속도 (m/s)
 speed_c3 = 60.0   # 곡선3 구간 속도 (m/s)
 
 # 후진 구간 (1-2)
-speed_r1 = -30.0  # 후진1 구간 속도 (m/s, 음수)
-speed_r2 = -50.0  # 후진2 구간 속도 (m/s, 음수)
+speed_r1 = -20.0  # 후진1 구간 속도 (m/s, 음수)
+speed_r2 = -30.0  # 후진2 구간 속도 (m/s, 음수)
 
 current_speed = 30.0    # 현재 속도 (초기값)
+
+# 후진 구간 조향각 계수
+reverse_steering_gain = 10.0
 
 
 
 # 구간 설정: [인덱스, 구간타입, 버전] 형태로 설정
 # 구간타입: 's' (straight), 'c' (curve), 'r' (reverse)
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
-# segment_config = [[13, 's', 4], [16, 's', 1], [38, 'r', 2], [43, 'r', 1], [49, 's', 1], [60, 'c', 3], [63, 's', '4']]   # T - parking 
-segment_config = [[6, 's', 4], [9, 's', 1], [15, 'r', 1], [26, 'r', 2], [36, 'r', 1], [40, 's', 1], [48, 'c', 1], [58, 'c', 3], [61, 's', '4']]   # ll - parking 
+segment_config = [[10, 's', 4], [14, 's', 1], [25, 'r', 1], [27, 's', 1], [38, 'c', 1]]   # T - parking 
+#segment_config = [[6, 's', 4], [9, 's', 1], [36, 'r', 1], [58, 'c', 1], [61, 's', '2']]   # ll - parking 
 
 
 # 구간 전환 거리 임계값 (다음 구간 타입별)
 segment_transition_distances = {
     'straight_to_curve': 1.0,    # 직선 → 곡선
-    'straight_to_reverse': 0.1,  # 직선 → 후진
+    'straight_to_reverse': 0.2,  # 직선 → 후진
 
     'curve_to_straight': 0.5,    # 곡선 → 직선
-    'curve_to_reverse': 0.1,     # 곡선 → 후진
+    'curve_to_reverse': 0.2,     # 곡선 → 후진
 
-    'reverse_to_straight': 0.1,  # 후진 → 직선
-    'reverse_to_curve': 0.1,     # 후진 → 곡선
+    'reverse_to_straight': 0.2,  # 후진 → 직선
+    'reverse_to_curve': 0.2,     # 후진 → 곡선
 
     'straight_to_straight': 1.0, # 직선 → 직선
     'curve_to_curve': 0.5,       # 곡선 → 곡선
-    'reverse_to_reverse': 0.1    # 후진 → 후진
+    'reverse_to_reverse': 0.2    # 후진 → 후진
 }
 
-# 경사로 대기 기능 설정
-slope_speed = 0.0  # 경사로에서 멈춰있기 위한 최소 출력값 (m/s)   -> 22.0
-slope_wait_time = 4.0  # 경사로에서 대기할 시간 (초)
-slope_waypoints = []  # 경사로 대기가 필요한 waypoint 인덱스들 (0부터 시작)
-slope_distance_threshold = 3.0  # 경사로 waypoint와의 거리 임계값 (m)
+# Waypoint별 출력 유지 기능 설정
+waypoint_wait_config = [
+    # [waypoint_index, output_speed, wait_time, distance_threshold]
+    # 예시: [10, 0.0, 4.0, 3.0]  # waypoint 10에서 0.0 m/s로 4초간 대기, 3m 이내에서 시작
+    # [25, 22.0, 2.0, 2.0]  # waypoint 25에서 22.0 m/s로 2초간 유지, 2m 이내에서 시작
+]
+
+# 라이다 장애물에 따른 경로 스위칭 설정
+route_switch_config = {
+    'wp_index_A': None,  # 예: 120
+    'wp_index_B': None,  # 예: 350
+    'distance_threshold': 0.5,
+    'sample_required': 5,  # 판단에 필요한 최소 True 샘플 수
+    'stop_time': 2.0,      # 정지하여 샘플 수집 및 전환/재생성에 할당할 시간(초)
+    'left_topic': '/lidar/left_obstacle',
+    'right_topic': '/lidar/right_obstacle',
+    'waypoint_files': {
+        'ver1': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver1.txt',
+        'ver2': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver2.txt',
+        'ver3': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver3.txt',
+        'ver4': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver4.txt'
+    }
+}
 
 def euler_from_quaternion(x, y, z, w):
     """쿼터니언에서 yaw 각도 추출 (control.py와 동일)"""
@@ -212,6 +234,8 @@ def pure_pursuit(current_x, current_y, current_heading, path, index, current_seg
     closest_point = None
     v = current_speed
     
+    is_reverse_segment = False
+
     # 후진 구간인지 확인
     is_reverse_segment = current_segment_info is not None and current_segment_info['type'] == 'reverse'
     
@@ -340,9 +364,9 @@ def pure_pursuit(current_x, current_y, current_heading, path, index, current_seg
     elif desired_steering_angle < -math.pi:
         desired_steering_angle += 2 * math.pi
     
-    # 후진 구간에서는 조향각도에 음수 적용
+    # 후진 구간에서는 조향각도에 음수 적용 및 계수 곱하기
     if is_reverse_segment:
-        desired_steering_angle = -desired_steering_angle
+        desired_steering_angle = -desired_steering_angle * reverse_steering_gain
     
     return v, float(desired_steering_angle*180/math.pi), index # degree 단위로 변환
 
@@ -356,7 +380,7 @@ class UTMPurePursuit(Node):
         self.yaw = 0.0
     
         # Waypoint 파일 경로 (수동 지정)
-        self.waypoints_file_path = "/home/jh/ros2_workspace/src/waypoints/yongin_wp copy.txt"  # 필요 시 이 경로를 수정하세요
+        self.waypoints_file_path = "/home/jh/ros2_workspace/src/remapped_utmcoordinates.txt"  # 필요 시 이 경로를 수정하세요
 
         # Waypoint 설정 (control.py의 goal과 유사)
         # Waypoint 설정: 단일 경로에서 로드
@@ -370,15 +394,33 @@ class UTMPurePursuit(Node):
         self.i = 0  # 경로 인덱스
         self.current_segment_index = 0  # 현재 구간 인덱스
         self.last_segment_index = -1    # 마지막으로 로깅한 구간 인덱스
+        self.last_path_index = -1       # 마지막으로 로깅한 path 인덱스
         self.first_odometry_received = False  # 첫 번째 GPS 데이터 수신 여부
         self.global_path_generated = False  # 전체 경로 생성 완료 여부
         self.current_waypoint_index = 0  # 현재 waypoint 인덱스
         
-        # 경사로 대기 기능 관련 변수들
-        self.is_slope_waiting = False  # 경사로 대기 중인지 여부
-        self.slope_wait_start_time = 0.0  # 경사로 대기 시작 시간
-        self.slope_wait_waypoint_index = -1  # 경사로 대기 중인 waypoint 인덱스
-        self.slope_wait_completed = set()  # 완료된 경사로 대기 waypoint 인덱스들
+        # Waypoint별 출력 유지 기능 관련 변수들
+        self.is_waypoint_waiting = False  # waypoint 대기 중인지 여부
+        self.waypoint_wait_start_time = 0.0  # waypoint 대기 시작 시간
+        self.waypoint_wait_index = -1  # 대기 중인 waypoint 인덱스
+        self.waypoint_wait_speed = 0.0  # 대기 중인 waypoint의 출력 속도
+        self.waypoint_wait_duration = 0.0  # 대기 시간
+        self.waypoint_wait_completed = set()  # 완료된 waypoint 대기 인덱스들
+        
+        # 라이다 장애물 감지 상태 및 경로 스위칭 관련 변수들
+        self.left_obstacle_detected = False
+        self.right_obstacle_detected = False
+        self.route_switch_done_A = False
+        self.route_switch_done_B = False
+        # 현재 경로 버전 추적 (초기 파일명에서 유추 또는 기본 ver1)
+        self.current_route_version = 'ver1'
+        # 전환 대기 상태 및 샘플 집계 변수
+        self.route_switch_state = 'idle'  # 'idle' | 'A_pending' | 'B_pending'
+        self.route_switch_start_time = 0.0
+        self.left_true_count = 0
+        self.left_total_count = 0
+        self.right_true_count = 0
+        self.right_total_count = 0
         
         # 구간 설정 (인덱스별 타입 지정)
         self.segment_config = segment_config
@@ -393,6 +435,9 @@ class UTMPurePursuit(Node):
         
         # 구간 정보 발행을 위한 String 퍼블리셔 추가
         self.segments_publisher = self.create_publisher(String, 'path_segments', 10)
+        
+        # 현재 waypoint 발행을 위한 String 퍼블리셔 추가
+        self.current_waypoint_publisher = self.create_publisher(String, 'waypoint_zone_info', 10)
         
         # 토픽 구독자 - GPS fix 데이터 구독
         self.gps_subscription = self.create_subscription(
@@ -410,6 +455,23 @@ class UTMPurePursuit(Node):
             10
         )
         
+        # 라이다 Left/Right 장애물 Bool 구독
+        try:
+            self.left_sub = self.create_subscription(
+                Bool,
+                route_switch_config['left_topic'],
+                self.left_obstacle_callback,
+                10
+            )
+            self.right_sub = self.create_subscription(
+                Bool,
+                route_switch_config['right_topic'],
+                self.right_obstacle_callback,
+                10
+            )
+        except Exception as e:
+            self.get_logger().warn(f"라이다 토픽 구독 설정 실패: {e}")
+        
         # control.py와 동일한 타이머 주기
         timer_period = 0.01  # 100Hz
         self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -421,14 +483,26 @@ class UTMPurePursuit(Node):
             self.get_logger().info(f"  Waypoint {i+1}: ({wp[0]:.3f}, {wp[1]:.3f})")
         self.get_logger().info("📡 GPS 및 IMU 데이터 수신 후 자동으로 추적을 시작합니다...")
         self.get_logger().info("🎯 구간별 적응적 전방주시거리, 속도 기능이 활성화되었습니다.")
+        self.get_logger().info(f"🔄 후진 구간 조향각 계수: {reverse_steering_gain}")
         self.get_logger().info("🔄 구간 전환 거리 설정:")
         for key, distance in segment_transition_distances.items():
             self.get_logger().info(f"   {key}: {distance}m")
-        self.get_logger().info("🛑 경사로 대기 기능이 활성화되었습니다:")
-        self.get_logger().info(f"   대기 waypoint: {slope_waypoints}")
-        self.get_logger().info(f"   거리 임계값: {slope_distance_threshold}m")
-        self.get_logger().info(f"   대기 시간: {slope_wait_time}초")
-        self.get_logger().info(f"   최소 출력 속도: {slope_speed} m/s")
+        self.get_logger().info("🛑 Waypoint별 출력 유지 기능이 활성화되었습니다:")
+        if waypoint_wait_config:
+            for i, config in enumerate(waypoint_wait_config):
+                if len(config) >= 4:
+                    waypoint_idx, output_speed, wait_time, distance_threshold = config
+                    self.get_logger().info(f"   설정 {i+1}: Waypoint {waypoint_idx} - 출력: {output_speed}m/s, 대기: {wait_time}초, 거리: {distance_threshold}m")
+        else:
+            self.get_logger().info("   현재 설정된 waypoint 대기 없음")
+        
+        # 라이다 기반 경로 스위칭 설정 로그
+        self.get_logger().info("🔁 라이다 장애물 기반 경로 스위칭 설정:")
+        self.get_logger().info(f"   A index: {route_switch_config['wp_index_A']}, B index: {route_switch_config['wp_index_B']}")
+        self.get_logger().info(f"   거리 임계값: {route_switch_config['distance_threshold']} m, 샘플임계: {route_switch_config['sample_required']}개, 정지시간: {route_switch_config['stop_time']}초")
+        self.get_logger().info(f"   Left 토픽: {route_switch_config['left_topic']}")
+        self.get_logger().info(f"   Right 토픽: {route_switch_config['right_topic']}")
+        self.get_logger().info(f"   경로 파일들: {route_switch_config['waypoint_files']}")
     
     def load_imu_calibration_angle(self):
         """IMU 보정각도 파일에서 읽기"""
@@ -558,6 +632,15 @@ class UTMPurePursuit(Node):
             self.get_logger().info(f"   구간 {i+1}: {seg['type']}{version} (waypoint {seg['waypoint_start']}-{seg['waypoint_end']}, "
                                  f"경로 {seg['start_index']}-{seg['end_index']}, 거리: {seg['segment_distance']:.2f}m)")
         
+        # 초기 구간 정보 디버깅
+        self.get_logger().info("🔍 초기 구간 디버깅:")
+        self.get_logger().info(f"   현재 구간 인덱스: {self.current_segment_index}")
+        if self.path_segments:
+            initial_segment = self.path_segments[0]
+            self.get_logger().info(f"   첫 번째 구간: {initial_segment['type']}{initial_segment.get('version', 1)}")
+            self.get_logger().info(f"   첫 번째 구간 범위: {initial_segment['start_index']}-{initial_segment['end_index']}")
+            self.get_logger().info(f"   현재 path 인덱스: {self.i}")
+        
         return True
     
 
@@ -607,8 +690,86 @@ class UTMPurePursuit(Node):
         msg.data = json.dumps(segments_data)
         self.segments_publisher.publish(msg)
         self.get_logger().info(f"📡 구간 정보 발행: {len(self.path_segments)}개 구간")
+    
+    def find_current_waypoint(self):
+        """현재 위치에서 가장 가까운 waypoint 인덱스를 찾는다."""
+        if not self.waypoints:
+            return -1
+        
+        min_distance = float('inf')
+        closest_index = 0
+        
+        for i, (wx, wy) in enumerate(self.waypoints):
+            distance = math.hypot(self.x - wx, self.y - wy)
+            if distance < min_distance:
+                min_distance = distance
+                closest_index = i
+        
+        return closest_index
+    
+    def publish_current_waypoint(self):
+        """현재 waypoint index를 String 형태로 발행"""
+        if not self.waypoints:
+            return
+        
+        current_wp_index = self.find_current_waypoint()
+        if current_wp_index < 0:
+            return
+        
+        msg = String()
+        msg.data = str(current_wp_index)
+        self.current_waypoint_publisher.publish(msg)
+        
+    def left_obstacle_callback(self, msg: Bool):
+        self.left_obstacle_detected = bool(msg.data)
+    
+    def right_obstacle_callback(self, msg: Bool):
+        self.right_obstacle_detected = bool(msg.data)
         
     
+    def find_initial_path_index(self):
+        """현재 위치와 진행 방향을 기준으로 초기 path 인덱스를 결정한다.
+
+        - 로봇 진행 방향(heading) 앞쪽(dot>=0)에 있는 waypoint들 중에서 가장 가까운 점 선택
+        - 만약 모두 뒤쪽이라면, 가장 가까운 점의 다음 인덱스를 선택(마지막이면 그대로 사용)
+        """
+        if not self.path:
+            return 0
+        heading_x = math.cos(self.yaw)
+        heading_y = math.sin(self.yaw)
+        best_index = -1
+        best_distance = float('inf')
+        # 진행 방향 전방에 있는 점 중 최단거리 선택
+        for idx, (px, py) in enumerate(self.path):
+            vec_x = px - self.x
+            vec_y = py - self.y
+            projection = heading_x * vec_x + heading_y * vec_y
+            if projection >= 0.0:
+                dist = math.hypot(vec_x, vec_y)
+                if dist < best_distance:
+                    best_distance = dist
+                    best_index = idx
+        # 전방 점이 하나도 없으면: 가장 가까운 점의 다음 인덱스를 선택
+        if best_index == -1:
+            nearest_idx = min(range(len(self.path)), key=lambda i: math.hypot(self.path[i][0] - self.x, self.path[i][1] - self.y))
+            if nearest_idx < len(self.path) - 1:
+                best_index = nearest_idx + 1
+            else:
+                best_index = nearest_idx
+        return best_index
+
+    def update_segment_index_from_path_index(self):
+        """self.i가 속한 구간을 찾아 self.current_segment_index를 동기화한다."""
+        if not self.path_segments:
+            self.current_segment_index = 0
+            return
+        for seg_idx, seg in enumerate(self.path_segments):
+            if seg['start_index'] <= self.i <= seg['end_index']:
+                self.current_segment_index = seg_idx
+                return
+        # 해당 없으면 처음으로 고정
+        self.current_segment_index = 0
+        
     def update_current_segment(self):
         """현재 위치에 따라 구간 정보 업데이트 (거리 기반 전환)"""
         current_segment = self.get_current_segment()
@@ -739,14 +900,19 @@ class UTMPurePursuit(Node):
         current_speed = target_speed
         current_lookahead_distance = target_lookahead
     
-    def should_start_slope_waiting(self):
-        """경사로 대기를 시작해야 하는지 확인 (거리 기반)"""
-        if self.is_slope_waiting:
+    def should_start_waypoint_waiting(self):
+        """waypoint별 출력 유지를 시작해야 하는지 확인 (거리 기반)"""
+        if self.is_waypoint_waiting:
             return None  # 이미 대기 중이면 시작하지 않음
         
-        # 경사로 대기 waypoint들과의 거리 확인
-        for waypoint_idx in slope_waypoints:
-            if waypoint_idx in self.slope_wait_completed:
+        # waypoint 대기 설정과의 거리 확인
+        for config in waypoint_wait_config:
+            if len(config) < 4:
+                continue  # 설정이 올바르지 않으면 무시
+                
+            waypoint_idx, output_speed, wait_time, distance_threshold = config
+            
+            if waypoint_idx in self.waypoint_wait_completed:
                 continue  # 이미 완료된 waypoint는 무시
             
             if waypoint_idx < len(self.waypoints):
@@ -754,58 +920,66 @@ class UTMPurePursuit(Node):
                 distance = math.hypot(self.x - waypoint[0], self.y - waypoint[1])
                 
                 # 디버깅 로그 (5초마다)
-                if hasattr(self, '_last_slope_debug_time'):
-                    if time.time() - self._last_slope_debug_time > 5.0:
-                        self.get_logger().info(f"🔍 경사로 대기 디버그: Waypoint {waypoint_idx}")
+                if hasattr(self, '_last_waypoint_debug_time'):
+                    if time.time() - self._last_waypoint_debug_time > 5.0:
+                        self.get_logger().info(f"🔍 Waypoint 대기 디버그: Waypoint {waypoint_idx}")
                         self.get_logger().info(f"   현재 위치: ({self.x:.2f}, {self.y:.2f})")
                         self.get_logger().info(f"   Waypoint 위치: ({waypoint[0]:.2f}, {waypoint[1]:.2f})")
-                        self.get_logger().info(f"   거리: {distance:.2f}m, 임계값: {slope_distance_threshold}m")
-                        self._last_slope_debug_time = time.time()
+                        self.get_logger().info(f"   거리: {distance:.2f}m, 임계값: {distance_threshold}m")
+                        self.get_logger().info(f"   출력 속도: {output_speed}m/s, 대기 시간: {wait_time}초")
+                        self._last_waypoint_debug_time = time.time()
                 else:
-                    self._last_slope_debug_time = time.time()
+                    self._last_waypoint_debug_time = time.time()
                 
-                if distance <= slope_distance_threshold:
-                    return waypoint_idx  # 해당 waypoint 인덱스 반환
+                if distance <= distance_threshold:
+                    return config  # 해당 waypoint 설정 반환
         
         return None  # 대기할 waypoint 없음
     
-    def start_slope_waiting(self, waypoint_idx):
-        """경사로 대기 시작"""
-        self.is_slope_waiting = True
-        self.slope_wait_start_time = time.time()
-        self.slope_wait_waypoint_index = waypoint_idx
+    def start_waypoint_waiting(self, config):
+        """waypoint별 출력 유지 시작"""
+        waypoint_idx, output_speed, wait_time, distance_threshold = config
+        
+        self.is_waypoint_waiting = True
+        self.waypoint_wait_start_time = time.time()
+        self.waypoint_wait_index = waypoint_idx
+        self.waypoint_wait_speed = output_speed
+        self.waypoint_wait_duration = wait_time
+        
         waypoint = self.waypoints[waypoint_idx]
         distance = math.hypot(self.x - waypoint[0], self.y - waypoint[1])
-        self.get_logger().info(f"🛑 경사로 대기 시작: Waypoint {waypoint_idx} (거리: {distance:.2f}m)에서 {slope_wait_time}초 대기")
-        self.get_logger().info(f"   최소 출력 속도: {slope_speed} m/s")
+        self.get_logger().info(f"🛑 Waypoint 출력 유지 시작: Waypoint {waypoint_idx} (거리: {distance:.2f}m)에서 {wait_time}초 유지")
+        self.get_logger().info(f"   출력 속도: {output_speed} m/s")
     
-    def handle_slope_waiting(self):
-        """경사로 대기 중 처리"""
+    def handle_waypoint_waiting(self):
+        """waypoint별 출력 유지 중 처리"""
         current_time = time.time()
-        elapsed_time = current_time - self.slope_wait_start_time
+        elapsed_time = current_time - self.waypoint_wait_start_time
         
         # 대기 시간이 지났는지 확인
-        if elapsed_time >= slope_wait_time:
+        if elapsed_time >= self.waypoint_wait_duration:
             # 대기 완료 - 해당 waypoint를 완료 목록에 추가
-            completed_waypoint = self.slope_wait_waypoint_index
-            self.slope_wait_completed.add(completed_waypoint)
+            completed_waypoint = self.waypoint_wait_index
+            self.waypoint_wait_completed.add(completed_waypoint)
             
-            self.is_slope_waiting = False
-            self.slope_wait_start_time = 0.0
-            self.slope_wait_waypoint_index = -1
-            self.get_logger().info(f"✅ 경사로 대기 완료: Waypoint {completed_waypoint}에서 {elapsed_time:.1f}초 대기 후 정상 주행 재개")
+            self.is_waypoint_waiting = False
+            self.waypoint_wait_start_time = 0.0
+            self.waypoint_wait_index = -1
+            self.waypoint_wait_speed = 0.0
+            self.waypoint_wait_duration = 0.0
+            self.get_logger().info(f"✅ Waypoint 출력 유지 완료: Waypoint {completed_waypoint}에서 {elapsed_time:.1f}초 유지 후 정상 주행 재개")
             # 정상 주행을 위해 빈 twist 반환 (다음 루프에서 Pure Pursuit 실행)
             return Twist()
         
-        # 대기 중: 최소 출력으로 유지
+        # 대기 중: 설정된 출력으로 유지
         twist = Twist()
-        twist.linear.x = slope_speed
+        twist.linear.x = self.waypoint_wait_speed
         twist.angular.z = 0.0  # 조향각은 0으로 유지
         
         # 대기 상태 로그 (1초마다)
         if int(elapsed_time) != int(elapsed_time - 0.01):  # 1초마다 로그
-            remaining_time = slope_wait_time - elapsed_time
-            self.get_logger().info(f"⏳ 경사로 대기 중: {remaining_time:.1f}초 남음 (속도: {slope_speed} m/s)")
+            remaining_time = self.waypoint_wait_duration - elapsed_time
+            self.get_logger().info(f"⏳ Waypoint 출력 유지 중: {remaining_time:.1f}초 남음 (속도: {self.waypoint_wait_speed} m/s)")
         
         return twist
         
@@ -843,13 +1017,143 @@ class UTMPurePursuit(Node):
                     self.get_logger().info("🚀 전체 경로 생성을 시작합니다!")
                     if self.generate_global_path():
                         self.global_path_generated = True
+                        # 현재 위치를 기준으로 초기 path 인덱스 결정
+                        try:
+                            initial_index = self.find_initial_path_index()
+                            self.i = int(initial_index)
+                            # 해당 인덱스 기준으로 현재 구간 인덱스 동기화
+                            self.update_segment_index_from_path_index()
+                            self.get_logger().info(f"🎯 초기 시작 인덱스 설정: i={self.i} (좌표: ({self.path[self.i][0]:.3f}, {self.path[self.i][1]:.3f}))")
+                            if 0 <= self.current_segment_index < len(self.path_segments):
+                                seg = self.path_segments[self.current_segment_index]
+                                seg_name = {'straight': '직선', 'curve': '곡선', 'reverse': '후진'}.get(seg['type'], seg['type'])
+                                self.get_logger().info(f"   시작 구간: {seg_name}{seg.get('version', 1)} (index {seg['start_index']}~{seg['end_index']})")
+                        except Exception as e:
+                            self.get_logger().warn(f"초기 시작 인덱스 계산 실패: {e}")
                         self.flag = 2  # 바로 추적 시작
                         self.get_logger().info("🎯 경로 추적을 시작합니다!")
                     else:
                         self.get_logger().error("경로 생성에 실패했습니다.")
-                        
         except Exception as e:
             self.get_logger().error(f"UTM 변환 실패: {e}")
+
+    def switch_route_to(self, version_key):
+        """경로 파일을 지정 버전으로 전환하고, 경로를 재생성 후 재시작한다."""
+        try:
+            files = route_switch_config['waypoint_files']
+            if version_key not in files:
+                self.get_logger().warn(f"알 수 없는 경로 버전: {version_key}")
+                return False
+            new_path = files[version_key]
+            if not os.path.exists(new_path):
+                self.get_logger().warn(f"경로 파일이 존재하지 않습니다: {new_path}")
+                return False
+            # 정지는 check_and_switch_route()에서 지속적으로 처리됨
+            # 파일 경로 변경 및 재로드
+            self.waypoints_file_path = new_path
+            self.waypoints = self.load_waypoints_from_file(self.waypoints_file_path)
+            if not self.waypoints:
+                self.get_logger().error("경로 파일 로드 실패로 스위칭 중단")
+                return False
+            # 경로 재생성
+            if not self.generate_global_path():
+                self.get_logger().error("경로 재생성 실패")
+                return False
+            # 현재 위치 기준 시작 인덱스 재설정
+            initial_index = self.find_initial_path_index()
+            self.i = int(initial_index)
+            self.update_segment_index_from_path_index()
+            self.current_route_version = version_key
+            self.get_logger().info(f"✅ 경로 스위칭 완료 → {version_key} ({self.waypoints_file_path}) | 시작 i={self.i}")
+            # 주행 재개
+            self.flag = 2
+            return True
+        except Exception as e:
+            self.get_logger().error(f"경로 스위칭 중 오류: {e}")
+            return False
+
+    def check_and_switch_route(self):
+        """A/B 웨이포인트 근접 시 일정 시간 정지하며 n회 샘플 수집 후 경로 전환."""
+        if not self.path:
+            return None
+        threshold = route_switch_config['distance_threshold']
+        sample_required = route_switch_config['sample_required']
+        stop_time = route_switch_config['stop_time']
+
+        # 전환 대기 상태 처리
+        if self.route_switch_state in ('A_pending', 'B_pending'):
+            # 정지 유지
+            stop_twist = Twist(); stop_twist.linear.x = 0.0; stop_twist.angular.z = 0.0
+            # 샘플 집계: 타이머 주기마다 한 샘플로 간주
+            if self.route_switch_state == 'A_pending':
+                self.left_total_count += 1
+                if self.left_obstacle_detected:
+                    self.left_true_count += 1
+            else:
+                self.right_total_count += 1
+                if self.right_obstacle_detected:
+                    self.right_true_count += 1
+
+            elapsed = time.time() - self.route_switch_start_time
+            if elapsed >= stop_time:
+                if self.route_switch_state == 'A_pending':
+                    # 판단: Left True 샘플이 임계 이상이면 ver2, 아니면 ver1
+                    target_version = 'ver2' if self.left_true_count >= sample_required else 'ver1'
+                    self.get_logger().info(
+                        f"🅰️ A 판정 완료: True {self.left_true_count}/{self.left_total_count} → {target_version} 전환")
+                    self.route_switch_done_A = True
+                    # 상태 리셋
+                    self.route_switch_state = 'idle'
+                    self.left_true_count = self.left_total_count = 0
+                    # 경로 전환 수행
+                    if target_version != self.current_route_version:
+                        self.switch_route_to(target_version)
+                    # 전환 후 주행 재개는 switch_route_to 내부에서 처리됨
+                else:
+                    # 판단: Right True 샘플이 임계 이상이면 ver3, 아니면 유지
+                    do_switch = self.right_true_count >= sample_required
+                    self.get_logger().info(
+                        f"🅱️ B 판정 완료: True {self.right_true_count}/{self.right_total_count} → {'ver3 전환' if do_switch else '유지'}")
+                    self.route_switch_done_B = True
+                    # 상태 리셋
+                    self.route_switch_state = 'idle'
+                    self.right_true_count = self.right_total_count = 0
+                    if do_switch and self.current_route_version != 'ver3':
+                        self.switch_route_to('ver3')
+                # 정지 단계 종료 후 다음 루프에서 주행으로 넘어감
+                return stop_twist
+            else:
+                # 아직 수집 중: 계속 정지
+                return stop_twist
+
+        # 전환 대기 상태가 아닐 때: A/B 진입 조건 확인 (각 한 번만)
+        wpA = route_switch_config['wp_index_A']
+        if isinstance(wpA, int) and 0 <= wpA < len(self.waypoints) and not self.route_switch_done_A:
+            wx, wy = self.waypoints[wpA]
+            distA = math.hypot(self.x - wx, self.y - wy)
+            if distA <= threshold:
+                self.get_logger().info(f"🅰️ A 지점 근접({distA:.2f}m) → 정지 후 샘플 수집 시작")
+                self.route_switch_state = 'A_pending'
+                self.route_switch_start_time = time.time()
+                self.left_true_count = 0
+                self.left_total_count = 0
+                t = Twist(); t.linear.x = 0.0; t.angular.z = 0.0
+                return t
+
+        wpB = route_switch_config['wp_index_B']
+        if isinstance(wpB, int) and 0 <= wpB < len(self.waypoints) and not self.route_switch_done_B:
+            wx, wy = self.waypoints[wpB]
+            distB = math.hypot(self.x - wx, self.y - wy)
+            if distB <= threshold:
+                self.get_logger().info(f"🅱️ B 지점 근접({distB:.2f}m) → 정지 후 샘플 수집 시작")
+                self.route_switch_state = 'B_pending'
+                self.route_switch_start_time = time.time()
+                self.right_true_count = 0
+                self.right_total_count = 0
+                t = Twist(); t.linear.x = 0.0; t.angular.z = 0.0
+                return t
+
+        return None
     
     def imu_callback(self, msg):
         """IMU 데이터 처리 - yaw 각도만 추출"""
@@ -896,23 +1200,44 @@ class UTMPurePursuit(Node):
                 self.get_logger().info(f"   현재 속도: {speed_val:.2f} m/s, 전방주시거리: {lookahead_val:.2f} m")
                 self.last_segment_index = self.current_segment_index
             
-            # 경사로 대기 로직 처리
+            # 현재 waypoint 발행 (거리 기반)
+            self.publish_current_waypoint()
+            
+            # 라이다 기반 경로 스위칭 우선 처리
+            switch_twist = self.check_and_switch_route()
+            if switch_twist is not None:
+                self.publisher.publish(switch_twist)
+                return
+
+            # Waypoint별 출력 유지 로직 처리
             twist = Twist()
             
-            # 경사로 대기 중인 경우
-            if self.is_slope_waiting:
-                twist = self.handle_slope_waiting()
+            # Waypoint 대기 중인 경우
+            if self.is_waypoint_waiting:
+                twist = self.handle_waypoint_waiting()
             else:
-                # 경사로 대기 체크 (거리 기반) - 대기 중이 아닐 때만
-                slope_waypoint_idx = self.should_start_slope_waiting()
-                if slope_waypoint_idx is not None:
-                    self.start_slope_waiting(slope_waypoint_idx)
-                    twist = self.handle_slope_waiting()  # 대기 시작 후 즉시 대기 처리
+                # Waypoint 대기 체크 (거리 기반) - 대기 중이 아닐 때만
+                waypoint_config = self.should_start_waypoint_waiting()
+                if waypoint_config is not None:
+                    self.start_waypoint_waiting(waypoint_config)
+                    twist = self.handle_waypoint_waiting()  # 대기 시작 후 즉시 대기 처리
                 else:
                     # 구간별 적응적 Pure Pursuit 제어 실행
                     twist.linear.x, twist.angular.z, self.i = pure_pursuit(
                         self.x, self.y, self.yaw, self.path, self.i, current_segment
                     )
+                    
+                    # Path index 변경 시 디버깅 로그
+                    if self.i != self.last_path_index:
+                        if current_segment is not None:
+                            seg_type = current_segment['type']
+                            seg_version = current_segment.get('version', 1)
+                            type_names = {'straight': '직선', 'curve': '곡선', 'reverse': '후진'}
+                            seg_type_name = type_names.get(seg_type, seg_type)
+                            self.get_logger().info(f"🎯 Path Index 변경: {self.i} (구간: {seg_type_name}{seg_version}, 좌표: ({self.path[self.i][0]:.3f}, {self.path[self.i][1]:.3f}))")
+                        else:
+                            self.get_logger().info(f"🎯 Path Index 변경: {self.i} (구간 정보 없음, 좌표: ({self.path[self.i][0]:.3f}, {self.path[self.i][1]:.3f}))")
+                        self.last_path_index = self.i
 
             distance_to_path_end = math.hypot(
                 self.x - self.path[-1][0], 
@@ -920,7 +1245,7 @@ class UTMPurePursuit(Node):
             )
 
             # 경로 완료 판정 (마지막 path 도달)
-            if (self.i >= len(self.path) - 10) and distance_to_path_end < 0.1:
+            if (self.i >= len(self.path) - 10) and distance_to_path_end < 0.3:
                 # 경로 완료
                 twist.linear.x = 0.0
                 twist.angular.z = 0.0
