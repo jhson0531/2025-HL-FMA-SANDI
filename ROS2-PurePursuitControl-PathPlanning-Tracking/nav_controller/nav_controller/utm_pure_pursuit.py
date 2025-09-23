@@ -25,8 +25,8 @@ lookahead_distance_s5 = 4.0  # 직선5 구간 전방주시거리 (미터) fast
 
 # 곡선 구간 (1-3)
 lookahead_distance_c1 = 0.5  # 곡선1 구간 전방주시거리 (미터) parking
-lookahead_distance_c2 = 0.8  # 곡선2 구간 전방주시거리 (미터) default
-lookahead_distance_c3 = 0.8  # 곡선3 구간 전방주시거리 (미터)
+lookahead_distance_c2 = 1.2  # 곡선2 구간 전방주시거리 (미터) default
+lookahead_distance_c3 = 1.8  # 곡선3 구간 전방주시거리 (미터)
 
 # 후진 구간 (1-2)
 lookahead_distance_r1 = 1.0  # 후진1 구간 전방주시거리 (미터) default
@@ -44,7 +44,7 @@ speed_s5 = 100.0   # 직선5 구간 속도 (m/s)
 
 # 곡선 구간 (1-3)
 speed_c1 = 35.0   # 곡선1 구간 속도 (m/s)
-speed_c2 = 60.0   # 곡선2 구간 속도 (m/s)
+speed_c2 = 50.0   # 곡선2 구간 속도 (m/s)
 speed_c3 = 60.0   # 곡선3 구간 속도 (m/s)
 
 # 후진 구간 (1-2)
@@ -61,8 +61,26 @@ reverse_steering_gain = 10.0
 # 구간 설정: [인덱스, 구간타입, 버전] 형태로 설정
 # 구간타입: 's' (straight), 'c' (curve), 'r' (reverse)
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
-segment_config = [[10, 's', 4], [14, 's', 1], [25, 'r', 1], [27, 's', 1], [38, 'c', 1]]   # T - parking 
-#segment_config = [[6, 's', 4], [9, 's', 1], [36, 'r', 1], [58, 'c', 1], [61, 's', '2']]   # ll - parking 
+# 버전별 세그먼트 설정(필요시 각 버전에 맞게 수정하세요)
+segment_configs = {
+    'ver1': [[15,'s',4], [16, 's', 3], [29, 's', 2], [67, 'c', 3], [93, 's', 4], [126, 'c', 2], [150, 's', 4], [158, 'c', 3], 
+             [178, 's', 2], [182, 's', 1], [216, 'r', 1], [246, 'c', 2], #T
+             [257, 's', 3], [268, 'c', 3], [275, 's', 4], [280, 'c', 3], [285, 's', 4], [290, 'c', 3], [304, 's', 4], [310, 'c', 3], [325, 's', 4], [330, 'c', 3], [340, 's', 4], [346, 'c', 3], [374, 's', 4], [380, 'c', 3], [391, 's', 4], 
+             [400, 'c', 1], [438, 'r', 1], [465, 'c', 1], [472, 's', 2], #ll
+             [484, 'c', 3], [493, 's', 3]],
+
+    'ver2': [[15,'s',4], [16, 's', 3], [29, 's', 2], [67, 'c', 3], [93, 's', 4], [126, 'c', 2], [150, 's', 4], [158, 'c', 3], 
+             [178, 's', 2], [182, 's', 1], [223, 'r', 1], [247, 'c', 2], #T
+             [257, 's', 3], [268, 'c', 3], [275, 's', 4], [280, 'c', 3], [285, 's', 4], [290, 'c', 3], [304, 's', 4], [310, 'c', 3], [325, 's', 4], [330, 'c', 3], [340, 's', 4], [346, 'c', 3], [374, 's', 4], [380, 'c', 3], [391, 's', 4], 
+             [400, 'c', 1], [438, 'r', 1], [465, 'c', 1], [472, 's', 2], #ll
+             [484, 'c', 3], [493, 's', 3]],  # 초기값: ver1과 동일
+    
+    'ver3': [[15,'s',4], [16, 's', 3], [29, 's', 2], [67, 'c', 3], [93, 's', 4], [126, 'c', 2], [150, 's', 4], [158, 'c', 3], 
+             [178, 's', 2], [182, 's', 1], [216, 'r', 1], [246, 'c', 2], 
+             [257, 's', 3], [268, 'c', 3], [275, 's', 4], [280, 'c', 3], [285, 's', 4], [290, 'c', 3], [304, 's', 4], [310, 'c', 3], [325, 's', 4], [330, 'c', 3], [340, 's', 4], [346, 'c', 3], [374, 's', 4], [380, 'c', 3], [391, 's', 4], 
+             [400, 'c', 1], [411, 'c', 1], [436, 'r', 1], [472, 'c', 1], 
+             [484, 'c', 3], [493, 's', 3]],  # 초기값: ver1과 동일
+}
 
 
 # 구간 전환 거리 임계값 (다음 구간 타입별)
@@ -81,28 +99,47 @@ segment_transition_distances = {
     'reverse_to_reverse': 0.2    # 후진 → 후진
 }
 
-# Waypoint별 출력 유지 기능 설정
-waypoint_wait_config = [
-    # [waypoint_index, output_speed, wait_time, distance_threshold]
-    # 예시: [10, 0.0, 4.0, 3.0]  # waypoint 10에서 0.0 m/s로 4초간 대기, 3m 이내에서 시작
-    # [25, 22.0, 2.0, 2.0]  # waypoint 25에서 22.0 m/s로 2초간 유지, 2m 이내에서 시작
-]
+# Waypoint별 출력 유지 기능 설정 (버전별)
+# [waypoint_index, output_speed, wait_time, distance_threshold]
+waypoint_wait_configs = {
+    'ver1': [
+        # 예시: [10, 0.0, 4.0, 3.0]
+        # [25, 22.0, 2.0, 2.0]
+        [16, 22.0, 5, 0.5],
+        [216, 0.0, 2, 0.3],
+        [438, 0.0, 3, 0.3]
+    ],
+    'ver2': [
+        [16, 22.0, 5, 0.5],
+        [223, 0.0, 2, 0.3],
+        [438, 0.0, 3, 0.3]
+    ],
+    'ver3': [
+        [16, 22.0, 5, 0.5],
+        [216, 0.0, 2, 0.3],
+        [436, 0.0, 3, 0.3]
+    ],
+}
 
 # 라이다 장애물에 따른 경로 스위칭 설정
 route_switch_config = {
-    'wp_index_A': None,  # 예: 120
-    'wp_index_B': None,  # 예: 350
-    'distance_threshold': 0.5,
+    'wp_index_A': 166,  
+    'wp_index_B': 400,  
+    'distance_threshold': 0.3,
     'sample_required': 5,  # 판단에 필요한 최소 True 샘플 수
     'stop_time': 2.0,      # 정지하여 샘플 수집 및 전환/재생성에 할당할 시간(초)
-    'left_topic': '/lidar/left_obstacle',
-    'right_topic': '/lidar/right_obstacle',
+    'left_topic': '/lidar_obstacle_info_left',
+    'right_topic': '/lidar_obstacle_info_right',
+    # 'waypoint_files': {
+    #     'ver1': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver1.txt',
+    #     'ver2': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver2.txt',
+    #     'ver3': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver3.txt'
+    # }
     'waypoint_files': {
-        'ver1': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver1.txt',
-        'ver2': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver2.txt',
-        'ver3': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver3.txt',
-        'ver4': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver4.txt'
-    }
+         'ver1': '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver1.txt',
+         'ver2': '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver2.txt',
+         'ver3': '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver3.txt'
+     }
 }
 
 def euler_from_quaternion(x, y, z, w):
@@ -138,7 +175,7 @@ def create_manual_segments(waypoints, segment_config):
     # 설정을 인덱스 순으로 정렬
     sorted_config = sorted(segment_config, key=lambda x: x[0])
     
-    # 유효성 검사: 인덱스가 waypoint 범위 내에 있는지 확인
+    # 유효성 검사: 인덱스가 waypoint 범위 내(0 <= idx < total_waypoints)에 있는지 확인
     valid_config = []
     for config_item in sorted_config:
         if len(config_item) == 3:
@@ -147,7 +184,7 @@ def create_manual_segments(waypoints, segment_config):
             idx, seg_type = config_item
             version = 1  # 기본 버전
         
-        if 0 <= idx <= total_waypoints and seg_type in type_mapping:
+        if 0 <= idx < total_waypoints and seg_type in type_mapping:
             valid_config.append((idx, seg_type, version))
         else:
             print(f"경고: 잘못된 구간 설정 무시 - 인덱스: {idx}, 타입: {seg_type}, 버전: {version}")
@@ -167,6 +204,14 @@ def create_manual_segments(waypoints, segment_config):
     start_idx = 0
     
     for i, (end_idx, seg_type, version) in enumerate(valid_config):
+        # 경계 클램핑: end_idx가 총 길이를 넘지 않도록 조정
+        if total_waypoints > 0:
+            end_idx = max(0, min(end_idx, total_waypoints - 1))
+        # start_idx가 end_idx를 넘으면 건너뜀
+        if start_idx > end_idx:
+            start_idx = min(start_idx, total_waypoints - 1)
+            if start_idx > end_idx:
+                continue
         # 현재 구간 저장 (version 정보 포함)
         segments.append({
             'type': type_mapping[seg_type],
@@ -181,7 +226,7 @@ def create_manual_segments(waypoints, segment_config):
         start_idx = end_idx + 1
     
     # 마지막 구간이 전체 waypoint를 포함하지 않는 경우, 마지막 구간을 확장
-    if segments and segments[-1]['end_index'] < total_waypoints - 1:
+    if segments and total_waypoints > 0 and segments[-1]['end_index'] < total_waypoints - 1:
         # 마지막 구간을 전체 끝까지 확장
         segments[-1]['end_index'] = total_waypoints - 1
         segments[-1]['waypoint_end'] = total_waypoints - 1
@@ -379,8 +424,13 @@ class UTMPurePursuit(Node):
         self.y = 0.0
         self.yaw = 0.0
     
-        # Waypoint 파일 경로 (수동 지정)
-        self.waypoints_file_path = "/home/jh/ros2_workspace/src/remapped_utmcoordinates.txt"  # 필요 시 이 경로를 수정하세요
+        # Waypoint 파일 경로: 현재 버전(ver1) 목록에서 시작
+        try:
+            files = route_switch_config['waypoint_files']
+            self.waypoints_file_path = files.get(self.current_route_version, files.get('ver1'))
+        except Exception:
+            # 실패 시 안전한 기본값
+            self.waypoints_file_path = "/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver1.txt"
 
         # Waypoint 설정 (control.py의 goal과 유사)
         # Waypoint 설정: 단일 경로에서 로드
@@ -422,8 +472,12 @@ class UTMPurePursuit(Node):
         self.right_true_count = 0
         self.right_total_count = 0
         
-        # 구간 설정 (인덱스별 타입 지정)
-        self.segment_config = segment_config
+        # 구간 설정 (인덱스별 타입 지정) - 현재 버전에 따른 세그먼트 적용
+        try:
+            self.segment_config = segment_configs.get(self.current_route_version, [])
+        except NameError:
+            # 구버전 호환: segment_configs 미정의 시 빈 설정
+            self.segment_config = []
         
         # IMU 보정각도 로드
         self.imu_calibration_angle = self.load_imu_calibration_angle()
@@ -487,9 +541,15 @@ class UTMPurePursuit(Node):
         self.get_logger().info("🔄 구간 전환 거리 설정:")
         for key, distance in segment_transition_distances.items():
             self.get_logger().info(f"   {key}: {distance}m")
+        # 버전별 Waypoint 대기 설정 적용
+        try:
+            self.waypoint_wait_config = waypoint_wait_configs.get(self.current_route_version, [])
+        except NameError:
+            self.waypoint_wait_config = []
+
         self.get_logger().info("🛑 Waypoint별 출력 유지 기능이 활성화되었습니다:")
-        if waypoint_wait_config:
-            for i, config in enumerate(waypoint_wait_config):
+        if self.waypoint_wait_config:
+            for i, config in enumerate(self.waypoint_wait_config):
                 if len(config) >= 4:
                     waypoint_idx, output_speed, wait_time, distance_threshold = config
                     self.get_logger().info(f"   설정 {i+1}: Waypoint {waypoint_idx} - 출력: {output_speed}m/s, 대기: {wait_time}초, 거리: {distance_threshold}m")
@@ -906,7 +966,7 @@ class UTMPurePursuit(Node):
             return None  # 이미 대기 중이면 시작하지 않음
         
         # waypoint 대기 설정과의 거리 확인
-        for config in waypoint_wait_config:
+        for config in self.waypoint_wait_config:
             if len(config) < 4:
                 continue  # 설정이 올바르지 않으면 무시
                 
@@ -1055,6 +1115,12 @@ class UTMPurePursuit(Node):
             if not self.waypoints:
                 self.get_logger().error("경로 파일 로드 실패로 스위칭 중단")
                 return False
+            # 버전별 세그먼트 구성 갱신
+            try:
+                self.segment_config = segment_configs.get(version_key, self.segment_config)
+            except NameError:
+                pass
+
             # 경로 재생성
             if not self.generate_global_path():
                 self.get_logger().error("경로 재생성 실패")

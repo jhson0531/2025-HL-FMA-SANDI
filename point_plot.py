@@ -25,8 +25,8 @@ except Exception:
 # =============================================================================
 
 # 입력 waypoint 파일 경로
-# INPUT_WAYPOINTS_FILE = 'remapped_utmcoordinates.txt'  # 시각화할 waypoint 파일
-INPUT_WAYPOINTS_FILE = 'waypoints/ll_parking.txt'
+INPUT_WAYPOINTS_FILE = 'remapped_utmcoordinates_ver1.txt'  # 시각화할 waypoint 파일
+# INPUT_WAYPOINTS_FILE = 'waypoints/full_wp_ver1.txt'
 
 # =============================================================================
 

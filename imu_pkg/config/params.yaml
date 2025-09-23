@@ -1,0 +1,5 @@
+iahrs_reader:
+      ros__parameters:
+            port: "/dev/ttyUSB0"  # 실제 IMU 포트로 변경
+            baud: 115200
+            map_json: '{"ax":0,"ay":1,"az":2,"gx":3,"gy":4,"gz":5,"roll":6,"pitch":7,"yaw":8,"accel_in_g":true,"gyro_in_deg":true}'

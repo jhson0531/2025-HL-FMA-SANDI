@@ -10,8 +10,8 @@ from rclpy.qos import QoSReliabilityPolicy
 from .lib import lidar_perception_func_lib as LPFL
 
 #---------------Variable Setting---------------
-# Subscribe할 토픽 이름 (역할에 맞게 '/scan'으로 수정)
-SUB_TOPIC_NAME = '/scan'
+# Subscribe할 토픽 이름
+SUB_TOPIC_NAME = 'lidar_raw'
 
 # Publish할 토픽 이름
 PUB_TOPIC_NAME = 'lidar_processed'
@@ -28,11 +28,10 @@ class LidarSensorDataProcessor(Node):
             depth=1
         )
 
-        # 이제 변수를 사용하도록 수정
         self.subscription = self.create_subscription(
             LaserScan,
             SUB_TOPIC_NAME,
-            self.scan_callback, # <-- 콜백 함수 이름도 역할에 맞게 변경 (선택 사항)
+            self.lidar_raw_cb,
             self.qos_profile)  
         
         self.publisher = self.create_publisher(
@@ -40,17 +39,15 @@ class LidarSensorDataProcessor(Node):
             PUB_TOPIC_NAME,
             self.qos_profile) 
 
-    def scan_callback(self, msg): # <-- 함수 이름 변경
+    def lidar_raw_cb(self, msg):
         # 이 함수는 Lidar 데이터를 수신할 때마다 호출 됨.
-        self.get_logger().info(f'Received scan from {SUB_TOPIC_NAME}')
-        
-        # 데이터 가공 로직은 그대로 유지
-        processed_msg = LPFL.rotate_lidar_data(msg, offset = 0)
-        processed_msg = LPFL.flip_lidar_data(processed_msg, pivot_angle = 0)
-        
-        # 가공된 메시지를 발행
-        self.publisher.publish(processed_msg)
-        self.get_logger().info(f'Publishing processed scan to {PUB_TOPIC_NAME}')
+        ranges = msg.ranges
+        intensities = msg.intensities
+
+        msg = LPFL.rotate_lidar_data(msg, offset = 0) # offset은 0부터 359까지의 값을 입력
+        msg = LPFL.flip_lidar_data(msg, pivot_angle = 0) # pivot_angle은 0부터 359까지의 값을 입력
+        self.publisher.publish(msg)
+        self.get_logger().info(f'Received scan with {len(ranges)} ranges and {len(intensities)} intensities')
 
 def main(args=None):
     rclpy.init(args=args)

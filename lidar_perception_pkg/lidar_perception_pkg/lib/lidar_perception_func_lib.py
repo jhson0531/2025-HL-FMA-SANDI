@@ -165,6 +165,72 @@ def detect_object(ranges, start_angle, end_angle, range_min, range_max):
             return True
     return False
 
+def detect_object_with_details(ranges, start_angle, end_angle, range_min, range_max):
+    """
+    설정한 각도와 거리 범위 내에서만 장애물 감지와 함께 상세 정보를 반환하는 함수
+    
+    Parameters:
+    ranges: 라이다 센서값 리스트
+    start_angle: 감지할 각도 범위의 시작값 (도)
+    end_angle: 감지할 각도 범위의 끝값 (도)
+    range_min: 감지할 거리 범위의 최소값 (미터)
+    range_max: 감지할 거리 범위의 최대값 (미터)
+    
+    Returns:
+    tuple: (감지 여부(bool), 감지된 장애물들의 상세 정보 리스트)
+    """
+    num_readings = len(ranges)
+    detection_details = []
+    
+    # 각도 해상도 계산 (3240개 포인트를 360도로 매핑)
+    angle_resolution = num_readings / 360.0  # 약 9개 포인트/도
+    
+    # 각도 범위를 인덱스로 변환
+    if start_angle > end_angle:
+        # 0도를 포함하는 경우 (예: 345도 ~ 15도)
+        start_idx = int(start_angle * angle_resolution)
+        end_idx = int(end_angle * angle_resolution)
+        # 0도 경계를 넘나드는 경우
+        if start_idx >= num_readings:
+            start_idx = start_idx % num_readings
+        if end_idx >= num_readings:
+            end_idx = end_idx % num_readings
+        if start_idx > end_idx:
+            # 0도를 포함하는 경우
+            angle_range = list(range(start_idx, num_readings)) + list(range(0, end_idx + 1))
+        else:
+            angle_range = list(range(start_idx, end_idx + 1))
+    else:
+        # 일반적인 경우 (예: 0도 ~ 60도)
+        start_idx = int(start_angle * angle_resolution)
+        end_idx = int(end_angle * angle_resolution)
+        angle_range = list(range(start_idx, end_idx + 1))
+    
+    # 설정한 각도 범위 내에서만 검사
+    for idx in angle_range:
+        if idx >= num_readings:
+            continue
+            
+        distance = ranges[idx]
+        
+        # 유효한 거리값이고 설정된 거리 범위 내에 있는지 확인
+        if (distance != float('inf') and 
+            distance != 0.0 and 
+            range_min <= distance <= range_max):
+            
+            # 실제 각도 계산
+            actual_angle = idx / angle_resolution
+            
+            detection_details.append({
+                'angle': actual_angle,
+                'distance': distance,
+                'index': idx
+            })
+    
+    
+    detected = len(detection_details) > 0
+    return detected, detection_details
+
 class StabilityDetector:
     def __init__(self, consec_count):
         self.consec_count = consec_count

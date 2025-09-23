@@ -10,10 +10,10 @@ from sensor_msgs.msg import Imu
 
 # 입력 파일 경로
 CALIBRATION_FILE = 'imu_calibration_angle.txt'  # 보정각 및 목표 좌표 파일
-INPUT_WAYPOINTS_FILE = 'waypoints/L_turn.txt'         # 원본 waypoint 파일
+INPUT_WAYPOINTS_FILE = 'waypoints/full_wp_ver2.txt'         # 원본 waypoint 파일
 
 # 출력 파일 경로
-OUTPUT_FILE = 'remapped_utmcoordinates.txt'    # 리매핑된 좌표 저장 파일
+OUTPUT_FILE = 'remapped_utmcoordinates_ver2.txt'    # 리매핑된 좌표 저장 파일
 
 # =============================================================================
 

@@ -47,6 +47,17 @@ def generate_launch_description():
                     output='screen'
                 ),
                 
+                # Lidar S2 장애물 감지 시스템
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(
+                        os.path.join(
+                            get_package_share_directory('lidar_perception_pkg'),
+                            'launch',
+                            'lidar_s2_obstacle_detection_launch.py'
+                        )
+                    )
+                ),
+                
                 # UTM Pure Pursuit 노드
                 # Node(
                 #     package='nav_controller',
