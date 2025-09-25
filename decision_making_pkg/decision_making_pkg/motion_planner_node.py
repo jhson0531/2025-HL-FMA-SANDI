@@ -68,7 +68,7 @@ class MotionPlanningNode(Node):
         self.path_sub = self.create_subscription(PathPlanningResult, self.sub_path_topic, self.path_callback, self.qos_profile)
         self.traffic_light_sub = self.create_subscription(String, self.sub_traffic_light_topic, self.traffic_light_callback, self.qos_profile)
         self.lidar_sub = self.create_subscription(Bool, self.sub_lidar_obstacle_topic, self.lidar_callback, self.qos_profile)
-        self.waypoint_zone_sub = self.create_subscription(Bool, self.sub_waypoint_zone_topic, self.waypoint_zone_callback, self.qos_profile)
+        self.waypoint_zone_sub = self.create_subscription(String, self.sub_waypoint_zone_topic, self.waypoint_zone_callback, self.qos_profile)
         self.cmd_vel_sub = self.create_subscription(Twist, self.sub_cmd_vel_topic, self.cmd_vel_callback, self.qos_profile)
 
         # 퍼블리셔 설정
@@ -88,11 +88,13 @@ class MotionPlanningNode(Node):
 
     def lidar_callback(self, msg: Bool):
         self.lidar_data = msg
+        self.get_logger().debug(f"Lidar obstacle received: {msg.data}")
 
     def waypoint_zone_callback(self, msg: String):
         try:
             # String을 int로 변환
             self.waypoint_zone_data = int(msg.data)
+            self.get_logger().debug(f"Waypoint zone received: {self.waypoint_zone_data}")
         except ValueError:
             self.get_logger().warning(f"Invalid waypoint zone data: {msg.data}")
             self.waypoint_zone_data = None
@@ -101,6 +103,8 @@ class MotionPlanningNode(Node):
         self.cmd_vel_data = msg
         
     def timer_callback(self):
+        # 디버깅용 로그 추가
+        self.get_logger().debug(f"waypoint_zone_data: {self.waypoint_zone_data}, lidar_data: {self.lidar_data}, stop_zone: {self.stop_zone_start}-{self.stop_zone_end}")
 
         # waypoint 정지 구간에 있고 전방 장애물 감지 시에만 정지
         if (self.waypoint_zone_data is not None and
