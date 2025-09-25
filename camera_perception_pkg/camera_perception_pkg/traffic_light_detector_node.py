@@ -1,3 +1,5 @@
+#traffic_light_detector_node.py
+
 import cv2
 import random
 import numpy as np
@@ -40,6 +42,17 @@ class TrafficLightDetector(Node):
 
         self.cv_bridge = CvBridge()
 
+        # 안정화를 위한 파라미터 (연속 프레임 확인 임계값)
+        self.confirmation_threshold = self.declare_parameter('confirmation_threshold', 3).value
+
+        # 신뢰도 임계값 (이 값 이상일 때만 판단)
+        self.score_threshold = self.declare_parameter('score_threshold', 0.7).value
+
+        # 상태 관리 변수
+        self.last_published_state = 'None'
+        self.current_candidate = 'None'
+        self.candidate_counter = 0
+
         self.qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -49,44 +62,56 @@ class TrafficLightDetector(Node):
 
         self.detection_sub = Subscriber(self, DetectionArray, self.sub_detection_topic, qos_profile=self.qos_profile)
         self.image_sub = Subscriber(self, Image, self.sub_image_topic, qos_profile=self.qos_profile)
-        
-        # 동기화 객체를 생성. 이 객체는 [self.detection_sub, self.image_sub] 두 구독자에게 메시지가 도착하는 것을 감시
         self.ts = ApproximateTimeSynchronizer([self.detection_sub, self.image_sub], queue_size=1, slop=0.5)
         self.ts.registerCallback(self.sync_callback)
 
-        # 최종적으로 판별된 신호등 색상을 발행할 발행자를 생성
         self.publisher = self.create_publisher(String, self.pub_topic, self.qos_profile)
 
     def sync_callback(self, detection_msg: DetectionArray, image_msg: Image):
-        cv_image = self.cv_bridge.imgmsg_to_cv2(image_msg)
+        # 이미지는 현재 사용하지 않음 (필요 시 ROI 등 추가)
+        # cv_image = self.cv_bridge.imgmsg_to_cv2(image_msg)
+
+        # 이번 프레임에서의 임시 판단값
+        current_frame_detection = 'None'
+
+        # 신호등 전용 클래스만 통과 (YOLOv8/커스텀 pt: traffic_sign_*)
+        best_det = None
+        for det in detection_msg.detections:
+            cls = (det.class_name or '').strip()
+            if cls in (
+                'traffic_sign_red',
+                'traffic_sign_yellow',
+                'traffic_sign_green',
+                'traffic_sign_left_arrow'
+            ) and (det.score is not None and det.score >= self.score_threshold):
+                if best_det is None or det.score > best_det.score:
+                    best_det = det
+
+        if best_det is not None:
+            mapping = {
+                'traffic_sign_red': 'red',
+                'traffic_sign_yellow': 'yellow',
+                'traffic_sign_green': 'green',
+                'traffic_sign_left_arrow': 'left_arrow'
+            }
+            current_frame_detection = mapping.get(best_det.class_name, 'None')
+        else:
+            current_frame_detection = 'None'
+
+        # 매번 현재 상태 발행 (상태 변화와 무관)
+        # 상태 변화 체크를 위한 임시 변수
+        previous_state = self.last_published_state
+
+        self.last_published_state = current_frame_detection
+        color_msg = String()
+        color_msg.data = self.last_published_state
+        self.publisher.publish(color_msg)
+
+        # 상태 변화 시에만 로그 출력 (디버깅용)
+        if current_frame_detection != previous_state:
+            self.get_logger().info(f'Traffic light state changed to: {color_msg.data}')
         
-        # 신호등을 찾았는지 여부를 기록할 때 쓰는 플래그 변수
-        traffic_light_detected = False
-        # detection_msg에 포함된 모든 탐지 객체들을 하나씩 순회
-        for detection in detection_msg.detections:
-            # 현재 순회중인 객체의 클래스 이름이 traffic_light인지 확인
-            if detection.class_name == 'left_arrow':
-                traffic_light_color = "Left_arrow"
-            elif detection.class_name == 'stop_sign':
-                traffic_light_color = "Stop"
-            else:
-                traffic_light_color = "Unknow"
-
-            # 발행할 String 객체를 생성. 
-            # Publish traffic light color as string
-            color_msg = String()
-            color_msg.data = traffic_light_color
-            print(f'traffic light: {color_msg.data}') 
-            self.publisher.publish(color_msg)
-            traffic_light_detected = True
-            break  # Only process the first detected traffic light
-
-        if not traffic_light_detected:
-            # Publish 'None' if no traffic light is detected
-            color_msg = String()
-            color_msg.data = 'None'
-            print(f'traffic light: {color_msg.data}')
-            self.publisher.publish(color_msg)
+        
 
 
 def main(args=None):
