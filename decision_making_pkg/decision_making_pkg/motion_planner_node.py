@@ -55,9 +55,30 @@ class MotionPlanningNode(Node):
         self.waypoint_zone_data = None  # waypoint 구간 정보 (string -> int 변환)
         self.cmd_vel_data = None
 
+        # 신호등 상태 필터링 변수
+        self.filtered_traffic_light_state = 'None'  # 필터링된 신호등 상태
+        self.none_counter = 0  # 연속 None 카운터
+        self.none_threshold = self.declare_parameter('traffic_light_none_threshold', 33).value  # None으로 간주할 임계값
+
         # waypoint 정지 구간 설정
         self.stop_zone_start = self.declare_parameter('stop_zone_start', 346).value  # 정지 시작 waypoint
         self.stop_zone_end = self.declare_parameter('stop_zone_end', 374).value     # 정지 끝 waypoint
+
+        # 신호등 구간 설정 (3개 구간)
+        self.traffic_light_zones = [
+            {
+                'start': self.declare_parameter('traffic_light_zone1_start', 100).value,
+                'end': self.declare_parameter('traffic_light_zone1_end', 150).value
+            },
+            {
+                'start': self.declare_parameter('traffic_light_zone2_start', 200).value,
+                'end': self.declare_parameter('traffic_light_zone2_end', 250).value
+            },
+            {
+                'start': self.declare_parameter('traffic_light_zone3_start', 300).value,
+                'end': self.declare_parameter('traffic_light_zone3_end', 350).value
+            }
+        ]
 
         self.steering_command = 0.0
         self.speed_command = 0.0
@@ -74,6 +95,9 @@ class MotionPlanningNode(Node):
         # 퍼블리셔 설정
         self.publisher = self.create_publisher(MotionCommand, self.pub_topic, self.qos_profile)
 
+        # 필터링된 신호등 상태 발행용 퍼블리셔
+        self.filtered_traffic_light_publisher = self.create_publisher(String, "filtered_traffic_light_info", self.qos_profile)
+
         # 타이머 설정
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
 
@@ -85,6 +109,14 @@ class MotionPlanningNode(Node):
                 
     def traffic_light_callback(self, msg: String):
         self.traffic_light_data = msg
+        self.get_logger().debug(f"Traffic light received: {msg.data}")
+
+        # 신호등 상태 필터링 로직
+        self._update_filtered_traffic_light_state(msg.data)
+
+        # 신호등이 red로 인식되었을 때 추가 디버깅 로그
+        if self.filtered_traffic_light_state == "red":
+            self.get_logger().info("🚨 신호등 RED 감지!")
 
     def lidar_callback(self, msg: Bool):
         self.lidar_data = msg
@@ -101,20 +133,61 @@ class MotionPlanningNode(Node):
 
     def cmd_vel_callback(self, msg: Twist):
         self.cmd_vel_data = msg
+
+    def _update_filtered_traffic_light_state(self, current_state: str):
+        """신호등 상태 필터링 로직 (None 안정화)"""
+        if current_state != 'None':
+            # 신호등 감지됨: 즉시 해당 상태로 변경하고 none 카운터 리셋
+            if self.filtered_traffic_light_state != current_state:
+                self.get_logger().debug(f"Traffic light state changed: {self.filtered_traffic_light_state} -> {current_state}")
+            self.filtered_traffic_light_state = current_state
+            self.none_counter = 0
+        else:
+            # 'None' 감지됨: 연속 카운터 증가
+            self.none_counter += 1
+
+            # 연속 N번 이상 None이면 None 상태로 변경
+            if self.none_counter >= self.none_threshold:
+                if self.filtered_traffic_light_state != 'None':
+                    self.filtered_traffic_light_state = 'None'
+                    self.get_logger().debug(f"Traffic light filtered to None (after {self.none_counter} consecutive None detections)")
+            # 임계값 도달 전까지는 이전 상태 유지
+
+    def _is_in_traffic_light_zone(self, waypoint: int) -> bool:
+        """waypoint가 신호등 구간 중 하나에 속하는지 확인"""
+        for i, zone in enumerate(self.traffic_light_zones):
+            if zone['start'] <= waypoint <= zone['end']:
+                return True
+        return False
         
     def timer_callback(self):
         # 디버깅용 로그 추가
-        self.get_logger().debug(f"waypoint_zone_data: {self.waypoint_zone_data}, lidar_data: {self.lidar_data}, stop_zone: {self.stop_zone_start}-{self.stop_zone_end}")
+        self.get_logger().debug(f"waypoint_zone_data: {self.waypoint_zone_data}, lidar_data: {self.lidar_data}, traffic_light_raw: {self.traffic_light_data}, traffic_light_filtered: {self.filtered_traffic_light_state}, stop_zone: {self.stop_zone_start}-{self.stop_zone_end}")
 
-        # waypoint 정지 구간에 있고 전방 장애물 감지 시에만 정지
+        # 정지 조건들 체크
+        should_stop = False
+        stop_reason = ""
+
+        # 1. waypoint 정지 구간에서 라이다 장애물 감지
         if (self.waypoint_zone_data is not None and
             self.stop_zone_start <= self.waypoint_zone_data <= self.stop_zone_end and
             self.lidar_data is not None and self.lidar_data.data is True):
-            # 정지 구간에서 전방 장애물을 감지한 경우 - 정지
+            should_stop = True
+            stop_reason = f"Waypoint {self.waypoint_zone_data} 구간에서 장애물 감지"
+
+        # 2. 신호등 구간에서 빨간색 감지 (필터링된 상태 사용)
+        elif (self.waypoint_zone_data is not None and
+              self.filtered_traffic_light_state == "red" and
+              self._is_in_traffic_light_zone(self.waypoint_zone_data)):
+            should_stop = True
+            stop_reason = f"신호등 구간에서 빨간색 감지 (waypoint: {self.waypoint_zone_data})"
+
+        if should_stop:
+            # 정지
             self.steering_command = 0.0
             self.speed_command = 0.0
-            self.get_logger().info(f"Waypoint {self.waypoint_zone_data} 구간에서 장애물 감지로 인한 정지")
-
+            self.get_logger().info(f"🛑 정지 발동: {stop_reason}")
+            self.get_logger().debug(f"정지 조건 상세 - waypoint: {self.waypoint_zone_data}, lidar: {self.lidar_data}, traffic_light_filtered: {self.filtered_traffic_light_state}, none_counter: {self.none_counter}")
         else:
             # cmd_vel을 바탕으로 주행
             if self.cmd_vel_data is not None:
@@ -128,6 +201,11 @@ class MotionPlanningNode(Node):
                 self.steering_command = 0.0 # 조향 각속도 (rad/s)
                 
 
+
+        # 필터링된 신호등 상태 발행
+        filtered_msg = String()
+        filtered_msg.data = self.filtered_traffic_light_state
+        self.filtered_traffic_light_publisher.publish(filtered_msg)
 
         # 모션 명령 메시지 생성 및 퍼블리시
         motion_command_msg = MotionCommand()

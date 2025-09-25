@@ -136,9 +136,9 @@ route_switch_config = {
     #     'ver3': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver3.txt'
     # }
     'waypoint_files': {
-         'ver1': '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver1.txt',
-         'ver2': '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver2.txt',
-         'ver3': '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver3.txt'
+         'ver1': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver1.txt',
+         'ver2': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver2.txt',
+         'ver3': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver3.txt'
      }
 }
 
@@ -430,7 +430,7 @@ class UTMPurePursuit(Node):
             self.waypoints_file_path = files.get(self.current_route_version, files.get('ver1'))
         except Exception:
             # 실패 시 안전한 기본값
-            self.waypoints_file_path = "/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver1.txt"
+            self.waypoints_file_path = "/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver1.txt"
 
         # Waypoint 설정 (control.py의 goal과 유사)
         # Waypoint 설정: 단일 경로에서 로드
@@ -571,7 +571,7 @@ class UTMPurePursuit(Node):
         # 여러 경로에서 파일 찾기
         possible_paths = [
             "imu_calibration_angle.txt",  # 현재 디렉토리
-            "/home/jh/ros2_workspace/src/imu_calibration_angle.txt",  # 절대 경로
+            "/home/woong/our_ros2_ws/src/imu_calibration_angle.txt",  # 절대 경로
             os.path.join(os.path.dirname(__file__), "imu_calibration_angle.txt"),  # 스크립트 디렉토리
             os.path.join(os.getcwd(), "imu_calibration_angle.txt")  # 작업 디렉토리
         ]
@@ -1184,7 +1184,7 @@ class UTMPurePursuit(Node):
                     # 상태 리셋
                     self.route_switch_state = 'idle'
                     self.right_true_count = self.right_total_count = 0
-                    if do_switch and self.current_route_version != 'ver3':
+                    if do_switch is False and self.current_route_version != 'ver3':
                         self.switch_route_to('ver3')
                 # 정지 단계 종료 후 다음 루프에서 주행으로 넘어감
                 return stop_twist
