@@ -42,6 +42,17 @@ class TrafficLightDetector(Node):
 
         self.cv_bridge = CvBridge()
 
+        # 안정화를 위한 파라미터 (연속 프레임 확인 임계값)
+        self.confirmation_threshold = self.declare_parameter('confirmation_threshold', 3).value
+
+        # 신뢰도 임계값 (이 값 이상일 때만 판단)
+        self.score_threshold = self.declare_parameter('score_threshold', 0.7).value
+
+        # 상태 관리 변수
+        self.last_published_state = 'None'
+        self.current_candidate = 'None'
+        self.candidate_counter = 0
+
         self.qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -57,36 +68,45 @@ class TrafficLightDetector(Node):
         self.publisher = self.create_publisher(String, self.pub_topic, self.qos_profile)
 
     def sync_callback(self, detection_msg: DetectionArray, image_msg: Image):
-        cv_image = self.cv_bridge.imgmsg_to_cv2(image_msg)
-        
-        traffic_light_detected = False
-        for detection in detection_msg.detections:
-            if detection.class_name == 'traffic_light':
+        # 이미지는 현재 사용하지 않음 (필요 시 ROI 등 추가)
+        # cv_image = self.cv_bridge.imgmsg_to_cv2(image_msg)
 
-                hsv_ranges = {
-                    'red1': (np.array([0, 100, 95]), np.array([10, 255, 255])),
-                    'red2': (np.array([160, 100, 95]), np.array([179, 255, 255])),
-                    'yellow': (np.array([20, 100, 95]), np.array([30, 255, 255])),
-                    'green': (np.array([40, 100, 95]), np.array([90, 255, 255]))
-                }
+        # 이번 프레임에서의 임시 판단값
+        current_frame_detection = 'None'
 
-                # get_traffic_light_color -> Red, Yellow, Green, Unknown
-                traffic_light_color = CPFL.get_traffic_light_color(cv_image, detection.bbox, hsv_ranges) 
-                
-                # Publish traffic light color as string
-                color_msg = String()
-                color_msg.data = traffic_light_color
-                print(f'traffic light: {color_msg.data}') 
-                self.publisher.publish(color_msg)
-                traffic_light_detected = True
-                break  # Only process the first detected traffic light
+        # 신호등 전용 클래스만 통과 (YOLOv8/커스텀 pt: traffic_sign_*)
+        best_det = None
+        for det in detection_msg.detections:
+            cls = (det.class_name or '').strip()
+            if cls in (
+                'traffic_sign_red',
+                'traffic_sign_yellow',
+                'traffic_sign_green',
+                'traffic_sign_left_arrow'
+            ) and (det.score is not None and det.score >= self.score_threshold):
+                if best_det is None or det.score > best_det.score:
+                    best_det = det
 
-        if not traffic_light_detected:
-            # Publish 'None' if no traffic light is detected
+        if best_det is not None:
+            mapping = {
+                'traffic_sign_red': 'red',
+                'traffic_sign_yellow': 'yellow',
+                'traffic_sign_green': 'green',
+                'traffic_sign_left_arrow': 'left_arrow'
+            }
+            current_frame_detection = mapping.get(best_det.class_name, 'None')
+        else:
+            current_frame_detection = 'None'
+
+        # 즉시 상태 변경 (temporal filtering 없음)
+        if current_frame_detection != self.last_published_state:
+            self.last_published_state = current_frame_detection
             color_msg = String()
-            color_msg.data = 'None'
-            print(f'traffic light: {color_msg.data}')
+            color_msg.data = self.last_published_state
             self.publisher.publish(color_msg)
+            self.get_logger().info(f'Traffic light state changed to: {color_msg.data}')
+        
+        
 
 
 def main(args=None):
