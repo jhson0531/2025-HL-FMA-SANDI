@@ -56,14 +56,15 @@ class Yolov8Node(LifecycleNode):
         #---------------Variable Setting---------------
         # 딥러닝 모델 pt 파일명 작성
         #self.declare_parameter("model", "yolov8m.pt")
-        self.declare_parameter("model", "best.pt")
+        self.declare_parameter("model", "traffic_sign_detection.pt")
+        #self.declare_parameter("model", "best.pt")
         
         # 추론 하드웨어 선택 (cpu / gpu) 
-        self.declare_parameter("device", "cpu")
-        #self.declare_parameter("device", "cuda:0")
+        #self.declare_parameter("device", "cpu")
+        self.declare_parameter("device", "cuda:0")
         #----------------------------------------------
         
-        self.declare_parameter("threshold", 0.5)
+        self.declare_parameter("threshold", 0.25)  # 일반적인 임계값
         self.declare_parameter("enable", True)
         self.declare_parameter("image_reliability",
                                QoSReliabilityPolicy.RELIABLE)
@@ -273,6 +274,12 @@ class Yolov8Node(LifecycleNode):
             )
             results: Results = results[0].cpu() 
 
+            # 변수 초기화
+            hypothesis = []
+            boxes = []
+            masks = []
+            keypoints = []
+            
             if results.boxes: # 박스 있으면 
                 hypothesis = self.parse_hypothesis(results) # 클래스 id/이름/점수 리스트 생성
                 boxes = self.parse_boxes(results) # 위치/크기를 담은 BoundingBox2D 리스트 생성
@@ -286,21 +293,24 @@ class Yolov8Node(LifecycleNode):
             # create detection msgs
             detections_msg = DetectionArray() # 최종 퍼블리시할 컨테이너 메세지 생성, 이 안에 여러개의 detection 메시지를 담김.
 
-            for i in range(len(results)): # yolo가 검출한 객체만큼 반복해서 
+            # 검출된 객체 수만큼 반복 (results.boxes가 있으면 그 길이만큼)
+            num_detections = len(hypothesis) if hypothesis else 0
+            for i in range(num_detections): # yolo가 검출한 객체만큼 반복해서 
 
                 aux_msg = Detection()
 
-                if results.boxes:
+                if results.boxes and i < len(hypothesis):
                     aux_msg.class_id = hypothesis[i]["class_id"]
                     aux_msg.class_name = hypothesis[i]["class_name"]
                     aux_msg.score = hypothesis[i]["score"]
 
+                if results.boxes and i < len(boxes):
                     aux_msg.bbox = boxes[i]
 
-                if results.masks:
+                if results.masks and i < len(masks):
                     aux_msg.mask = masks[i]
 
-                if results.keypoints:
+                if results.keypoints and i < len(keypoints):
                     aux_msg.keypoints = keypoints[i]
 
                 detections_msg.detections.append(aux_msg) # detection 메세지 완성해서 detectionArray에 추가.
