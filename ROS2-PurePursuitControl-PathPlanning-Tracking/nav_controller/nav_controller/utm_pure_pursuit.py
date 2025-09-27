@@ -18,37 +18,37 @@ import re
 # 전방주시거리 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
 lookahead_distance_s1 = 0.5  # 직선1 구간 전방주시거리 (미터) parking
-lookahead_distance_s2 = 1.5  # 직선2 구간 전방주시거리 (미터) downhill
-lookahead_distance_s3 = 1.5  # 직선3 구간 전방주시거리 (미터) uphill
-lookahead_distance_s4 = 1.5  # 직선4 구간 전방주시거리 (미터) default
-lookahead_distance_s5 = 4.0  # 직선5 구간 전방주시거리 (미터) fast
+lookahead_distance_s2 = 2.0  # 직선2 구간 전방주시거리 (미터) downhill
+lookahead_distance_s3 = 2.0  # 직선3 구간 전방주시거리 (미터) uphill
+lookahead_distance_s4 = 2.0  # 직선4 구간 전방주시거리 (미터) default
+lookahead_distance_s5 = 2.0  # 직선5 구간 전방주시거리 (미터) fast
 
 # 곡선 구간 (1-3)
 lookahead_distance_c1 = 0.5  # 곡선1 구간 전방주시거리 (미터) parking
-lookahead_distance_c2 = 1.2  # 곡선2 구간 전방주시거리 (미터) default
-lookahead_distance_c3 = 1.8  # 곡선3 구간 전방주시거리 (미터)
+lookahead_distance_c2 = 1.5  # 곡선2 구간 전방주시거리 (미터) default
+lookahead_distance_c3 = 2.0  # 곡선3 구간 전방주시거리 (미터)
 
 # 후진 구간 (1-2)
-lookahead_distance_r1 = 1.0  # 후진1 구간 전방주시거리 (미터) default
-lookahead_distance_r2 = 1.3  # 후진2 구간 전방주시거리 (미터) slow
+lookahead_distance_r1 = 1.5  # 후진1 구간 전방주시거리 (미터) default
+lookahead_distance_r2 = 2.5  # 후진2 구간 전방주시거리 (미터) slow
 
 current_lookahead_distance = 0.3   # 현재 전방주시거리 (초기값)
 
 # 속도 설정 (세분화된 구간별)
 # 직선 구간 (1-5)
 speed_s1 = 35.0   # 직선1 구간 속도 (m/s)
-speed_s2 = 40.0   # 직선2 구간 속도 (m/s) 
-speed_s3 = 55.0   # 직선3 구간 속도 (m/s) 
-speed_s4 = 70.0   # 직선4 구간 속도 (m/s) 
-speed_s5 = 100.0   # 직선5 구간 속도 (m/s)
+speed_s2 = 70.0   # 직선2 구간 속도 (m/s) 
+speed_s3 = 90.0   # 직선3 구간 속도 (m/s) 
+speed_s4 = 100.0   # 직선4 구간 속도 (m/s) 
+speed_s5 = 130.0   # 직선5 구간 속도 (m/s)
 
 # 곡선 구간 (1-3)
 speed_c1 = 35.0   # 곡선1 구간 속도 (m/s)
 speed_c2 = 50.0   # 곡선2 구간 속도 (m/s)
-speed_c3 = 60.0   # 곡선3 구간 속도 (m/s)
+speed_c3 = 100.0   # 곡선3 구간 속도 (m/s)
 
 # 후진 구간 (1-2)
-speed_r1 = -20.0  # 후진1 구간 속도 (m/s, 음수)
+speed_r1 = -50.0  # 후진1 구간 속도 (m/s, 음수)
 speed_r2 = -30.0  # 후진2 구간 속도 (m/s, 음수)
 
 current_speed = 30.0    # 현재 속도 (초기값)
@@ -63,39 +63,39 @@ reverse_steering_gain = 10.0
 # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
 # 버전별 세그먼트 설정(필요시 각 버전에 맞게 수정하세요)
 segment_configs = {
-    'ver1': [[15,'s',4], [16, 's', 3], [29, 's', 2], [67, 'c', 3], [93, 's', 4], [126, 'c', 2], [150, 's', 4], [158, 'c', 3], 
-             [178, 's', 2], [182, 's', 1], [216, 'r', 1], [246, 'c', 2], #T
-             [257, 's', 3], [268, 'c', 3], [275, 's', 4], [280, 'c', 3], [285, 's', 4], [290, 'c', 3], [304, 's', 4], [310, 'c', 3], [325, 's', 4], [330, 'c', 3], [340, 's', 4], [346, 'c', 3], [374, 's', 4], [380, 'c', 3], [391, 's', 4], 
-             [400, 'c', 1], [438, 'r', 1], [465, 'c', 1], [472, 's', 2], #ll
-             [484, 'c', 3], [493, 's', 3]],
+    'ver1': [[15,'s',5], [16, 's', 4], [29, 's', 2], [117, 'c', 3],[138, 'c', 3], [159, 's', 4], [273, 'c', 3], [294, 's', 3], [319, 'c', 3],
+             [337, 's', 4], [339, 's', 1], [380, 'r', 1], [401, 'c', 2], #T
+             [413, 's', 3], [447, 'c', 3], [451, 's' ,4], [471, 'c',3], [474, 's',4], [491,'c', 3], [501, 's', 4], [519, 'c', 3], [533, 's', 4], [548, 'c', 3], [556, 's', 4], [575, 'c', 3], [601, 's', 5], [619, 'c', 3], [628, 's', 4], [646, 'c', 2],
+             [713, 'r', 1],[764,'c', 2], #ll
+             [800, 'c', 3], [807, 's', 4]],
 
-    'ver2': [[15,'s',4], [16, 's', 3], [29, 's', 2], [67, 'c', 3], [93, 's', 4], [126, 'c', 2], [150, 's', 4], [158, 'c', 3], 
-             [178, 's', 2], [182, 's', 1], [223, 'r', 1], [247, 'c', 2], #T
-             [257, 's', 3], [268, 'c', 3], [275, 's', 4], [280, 'c', 3], [285, 's', 4], [290, 'c', 3], [304, 's', 4], [310, 'c', 3], [325, 's', 4], [330, 'c', 3], [340, 's', 4], [346, 'c', 3], [374, 's', 4], [380, 'c', 3], [391, 's', 4], 
-             [400, 'c', 1], [438, 'r', 1], [465, 'c', 1], [472, 's', 2], #ll
-             [484, 'c', 3], [493, 's', 3]],  # 초기값: ver1과 동일
+    'ver2': [[15,'s',5], [16, 's', 4], [29, 's', 2], [117, 'c', 3], [138, 'c', 3], [159, 's', 4], [273, 'c', 3], [294, 's', 3], [319, 'c', 3],
+             [337, 's', 4], [339, 's', 1], [373, 'r', 1], [401, 'c', 2], #T
+             [413, 's', 3], [447, 'c', 3], [451, 's' ,4], [471, 'c',3], [474, 's',4], [491,'c', 3], [501, 's', 4], [519, 'c', 3], [533, 's', 4], [548, 'c', 3], [556, 's', 4], [575, 'c', 3], [601, 's', 5], [619, 'c', 3], [628, 's', 4], [646, 'c', 2],
+             [713, 'r',1],[764,'c', 2], #ll
+             [800, 'c', 3], [807, 's', 4]],  # 초기값: ver1과 동일
     
-    'ver3': [[15,'s',4], [16, 's', 3], [29, 's', 2], [67, 'c', 3], [93, 's', 4], [126, 'c', 2], [150, 's', 4], [158, 'c', 3], 
-             [178, 's', 2], [182, 's', 1], [216, 'r', 1], [246, 'c', 2], 
-             [257, 's', 3], [268, 'c', 3], [275, 's', 4], [280, 'c', 3], [285, 's', 4], [290, 'c', 3], [304, 's', 4], [310, 'c', 3], [325, 's', 4], [330, 'c', 3], [340, 's', 4], [346, 'c', 3], [374, 's', 4], [380, 'c', 3], [391, 's', 4], 
-             [400, 'c', 1], [411, 'c', 1], [436, 'r', 1], [472, 'c', 1], 
-             [484, 'c', 3], [493, 's', 3]],  # 초기값: ver1과 동일
+    'ver3': [[15,'s',5], [16, 's', 4], [29, 's', 2], [117, 'c', 3], [138, 'c', 3], [159, 's', 4], [273, 'c', 3], [294, 's', 3], [319, 'c', 3],
+             [337, 's', 4], [339, 's', 1], [373, 'r', 1], [401, 'c', 2], #T
+             [413, 's', 3], [447, 'c', 3], [451, 's' ,4], [471, 'c',3], [474, 's',4], [491,'c', 3], [501, 's', 4], [519, 'c', 3], [533, 's', 4], [548, 'c', 3], [556, 's', 4], [575, 'c', 3], [601, 's', 5], [619, 'c', 3], [628, 's', 4], [646, 'c', 2],
+             [664, 'c', 1], [698, 'r',1],[764,'c', 2], #ll
+             [800, 'c', 3], [807, 's', 4]],  # 초기값: ver1과 동일
 }
 
 
 # 구간 전환 거리 임계값 (다음 구간 타입별)
 segment_transition_distances = {
-    'straight_to_curve': 1.0,    # 직선 → 곡선
+    'straight_to_curve': 4.0,    # 직선 → 곡선
     'straight_to_reverse': 0.2,  # 직선 → 후진
 
-    'curve_to_straight': 0.5,    # 곡선 → 직선
+    'curve_to_straight': 4.0,    # 곡선 → 직선
     'curve_to_reverse': 0.2,     # 곡선 → 후진
 
     'reverse_to_straight': 0.2,  # 후진 → 직선
     'reverse_to_curve': 0.2,     # 후진 → 곡선
 
-    'straight_to_straight': 1.0, # 직선 → 직선
-    'curve_to_curve': 0.5,       # 곡선 → 곡선
+    'straight_to_straight': 4.0, # 직선 → 직선
+    'curve_to_curve': 2.0,       # 곡선 → 곡선
     'reverse_to_reverse': 0.2    # 후진 → 후진
 }
 
@@ -105,41 +105,107 @@ waypoint_wait_configs = {
     'ver1': [
         # 예시: [10, 0.0, 4.0, 3.0]
         # [25, 22.0, 2.0, 2.0]
-        [16, 22.0, 5, 0.5],
-        [216, 0.0, 2, 0.3],
-        [438, 0.0, 3, 0.3]
+        [16, 20.0, 5, 0.5],
+        [380, 0.0, 2, 0.2], #T 멈추기
+        [713, 0.0, 2, 0.2] #ll 멈추기
     ],
     'ver2': [
-        [16, 22.0, 5, 0.5],
-        [223, 0.0, 2, 0.3],
-        [438, 0.0, 3, 0.3]
+        [16, 20.0, 5, 0.5],
+        [373, 0.0, 2, 0.2], #T 멈추기
+        [713, 0.0, 2, 0.2] #ll 멈추기
     ],
     'ver3': [
-        [16, 22.0, 5, 0.5],
-        [216, 0.0, 2, 0.3],
-        [436, 0.0, 3, 0.3]
+        [16, 20.0, 5, 0.5],
+        [698, 0.0, 2, 0.2] #ll 멈추기
     ],
 }
 
+# # 구간 설정: [인덱스, 구간타입, 버전] 형태로 설정
+# # 구간타입: 's' (straight), 'c' (curve), 'r' (reverse)
+# # 버전: 1-5 (직선), 1-3 (곡선), 1-2 (후진)
+# # 버전별 세그먼트 설정(필요시 각 버전에 맞게 수정하세요)
+# segment_configs = {
+#     'ver1': [[15,'s',4], [16, 's', 3], [29, 's', 2], [117, 'c', 3], [121, 's', 4], [136, 'c', 3], [159, 's', 4], [271, 'c', 3], [294, 's', 3], [317, 'c', 3],
+#              [337, 's', 4], [339, 's', 1], [380, 'r', 1], [401, 'c', 2], #T
+#              [413, 's', 3], [445, 'c', 3], [451, 's' ,4], [469, 'c',3], [474, 's',4], [489,'c', 3], [501, 's', 4], [517, 'c', 3], [533, 's', 4], [546, 'c', 3], [556, 's', 4], [573, 'c', 3], [601, 's', 4], [617, 'c', 3], [628, 's', 4], 
+#              [647, 'c', 2], [713, 'r',1], [764,'c', 2], #ll
+#              [798, 'c', 3], [807, 's', 4]],
+
+#     'ver2': [[15,'s',4], [16, 's', 3], [29, 's', 2], [117, 'c', 3], [121, 's', 4], [136, 'c', 3], [159, 's', 4], [271, 'c', 3], [294, 's', 3], [317, 'c', 3],
+#              [337, 's', 4], [339, 's', 1], [373, 'r', 1], [401, 'c', 2], #T
+#              [413, 's', 3], [445, 'c', 3], [451, 's' ,4], [469, 'c',3], [474, 's',4], [489,'c', 3], [501, 's', 4], [517, 'c', 3], [533, 's', 4], [546, 'c', 3], [556, 's', 4], [573, 'c', 3], [601, 's', 4], [617, 'c', 3], [628, 's', 4], 
+#              [646, 'c', 2], [713, 'r',1], [764,'c', 2], #ll
+#              [798, 'c', 3], [807, 's', 4]],  # 초기값: ver1과 동일
+    
+#     'ver3': [[15,'s',4], [16, 's', 3], [29, 's', 2], [117, 'c', 3], [121, 's', 4], [136, 'c', 3], [159, 's', 4], [271, 'c', 3], [294, 's', 3], [317, 'c', 3],
+#              [337, 's', 4], [339, 's', 1], [373, 'r', 1], [401, 'c', 2], #T
+#              [413, 's', 3], [445, 'c', 3], [451, 's' ,4], [469, 'c',3], [474, 's',4], [489,'c', 3], [501, 's', 4], [517, 'c', 3], [533, 's', 4], [546, 'c', 3], [556, 's', 4], [573, 'c', 3], [601, 's', 4], [617, 'c', 3], [628, 's', 4], 
+#              [646, 'c', 2], [665, 'c', 1], [698, 'r',1], [764,'c', 2], #ll
+#              [798, 'c', 3], [807, 's', 4]],  # 초기값: ver1과 동일
+# }
+
+
+# # 구간 전환 거리 임계값 (다음 구간 타입별)
+# segment_transition_distances = {
+#     'straight_to_curve': 1.0,    # 직선 → 곡선
+#     'straight_to_reverse': 0.2,  # 직선 → 후진
+
+#     'curve_to_straight': 0.5,    # 곡선 → 직선
+#     'curve_to_reverse': 0.2,     # 곡선 → 후진
+
+#     'reverse_to_straight': 0.2,  # 후진 → 직선
+#     'reverse_to_curve': 0.2,     # 후진 → 곡선
+
+#     'straight_to_straight': 1.0, # 직선 → 직선
+#     'curve_to_curve': 0.5,       # 곡선 → 곡선
+#     'reverse_to_reverse': 0.2    # 후진 → 후진
+# }
+
+# # Waypoint별 출력 유지 기능 설정 (버전별)
+# # [waypoint_index, output_speed, wait_time, distance_threshold]
+# waypoint_wait_configs = {
+#     'ver1': [
+#         # 예시: [10, 0.0, 4.0, 3.0]
+#         # [25, 22.0, 2.0, 2.0]
+#         [16, 22.0, 5, 0.5],
+#         [323, 0.0, 2, 0.3], #T 확인
+#         [646, 0.0, 3, 0.3] #ll 확인
+#         [713] #ll 멈추기
+#     ],
+#     'ver2': [
+#         [16, 22.0, 5, 0.5],
+#         [323, 0.0, 2, 0.3],
+#         [646, 0.0, 3, 0.3],
+#         [713] #ll 멈추기
+#     ],
+#     'ver3': [
+#         [16, 22.0, 5, 0.5],
+#         [323, 0.0, 2, 0.3],
+#         [646, 0.0, 3, 0.3],
+#         [698] #ll 멈추기
+#     ],
+# }
+
 # 라이다 장애물에 따른 경로 스위칭 설정
 route_switch_config = {
-    'wp_index_A': 166,  
-    'wp_index_B': 400,  
-    'distance_threshold': 0.3,
+    'wp_index_A': 323,  
+    'wp_index_B': 646,  
+    'distance_threshold': 0.6,
     'sample_required': 5,  # 판단에 필요한 최소 True 샘플 수
     'stop_time': 2.0,      # 정지하여 샘플 수집 및 전환/재생성에 할당할 시간(초)
     'left_topic': '/lidar_obstacle_info_left',
     'right_topic': '/lidar_obstacle_info_right',
-    # 'waypoint_files': {
-    #     'ver1': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver1.txt',
-    #     'ver2': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver2.txt',
-    #     'ver3': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver3.txt'
-    # }
     'waypoint_files': {
-         'ver1': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver1.txt',
-         'ver2': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver2.txt',
-         'ver3': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver3.txt'
-     }
+        'ver1': '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver1.txt',
+        'ver2': '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver2.txt',
+        'ver3': '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver3.txt'
+    }
+    # waypoint 파일 경로들은 파라미터에서 로드됨
+#     'waypoint_files': {
+#          'ver1': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver1.txt',  # 기본값
+#          'ver2': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver2.txt',  # 기본값
+#          'ver3': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver3.txt'   # 기본값
+#      }
 }
 
 def euler_from_quaternion(x, y, z, w):
@@ -423,14 +489,23 @@ class UTMPurePursuit(Node):
         self.x = 0.0
         self.y = 0.0
         self.yaw = 0.0
-    
-        # Waypoint 파일 경로: 현재 버전(ver1) 목록에서 시작
-        try:
-            files = route_switch_config['waypoint_files']
-            self.waypoints_file_path = files.get(self.current_route_version, files.get('ver1'))
-        except Exception:
-            # 실패 시 안전한 기본값
-            self.waypoints_file_path = "/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver1.txt"
+
+        # 현재 경로 버전 추적 (초기 파일명에서 유추 또는 기본 ver1)
+        self.current_route_version = 'ver1'
+
+        # Waypoint 파일 경로 파라미터 설정
+        self.declare_parameter('waypoint_ver1_path', '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver1.txt')
+        self.declare_parameter('waypoint_ver2_path', '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver2.txt')
+        self.declare_parameter('waypoint_ver3_path', '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver3.txt')
+
+        # Waypoint 파일 경로: 파라미터에서 로드
+        waypoint_files = {
+            'ver1': self.get_parameter('waypoint_ver1_path').value,
+            'ver2': self.get_parameter('waypoint_ver2_path').value,
+            'ver3': self.get_parameter('waypoint_ver3_path').value
+        }
+
+        self.waypoints_file_path = waypoint_files.get(self.current_route_version, waypoint_files.get('ver1'))
 
         # Waypoint 설정 (control.py의 goal과 유사)
         # Waypoint 설정: 단일 경로에서 로드
@@ -445,6 +520,7 @@ class UTMPurePursuit(Node):
         self.current_segment_index = 0  # 현재 구간 인덱스
         self.last_segment_index = -1    # 마지막으로 로깅한 구간 인덱스
         self.last_path_index = -1       # 마지막으로 로깅한 path 인덱스
+        self.last_target_index = -1     # 마지막으로 로깅한 타겟 인덱스
         self.first_odometry_received = False  # 첫 번째 GPS 데이터 수신 여부
         self.global_path_generated = False  # 전체 경로 생성 완료 여부
         self.current_waypoint_index = 0  # 현재 waypoint 인덱스
@@ -462,8 +538,6 @@ class UTMPurePursuit(Node):
         self.right_obstacle_detected = False
         self.route_switch_done_A = False
         self.route_switch_done_B = False
-        # 현재 경로 버전 추적 (초기 파일명에서 유추 또는 기본 ver1)
-        self.current_route_version = 'ver1'
         # 전환 대기 상태 및 샘플 집계 변수
         self.route_switch_state = 'idle'  # 'idle' | 'A_pending' | 'B_pending'
         self.route_switch_start_time = 0.0
@@ -533,8 +607,8 @@ class UTMPurePursuit(Node):
         self.get_logger().info("🚀 구간별 적응적 UTM Pure Pursuit 노드가 시작되었습니다!")
         self.get_logger().info(f"IMU 보정각도: {self.imu_calibration_angle:.6f} rad ({math.degrees(self.imu_calibration_angle):.2f}°)")
         self.get_logger().info(f"총 {len(self.waypoints)}개의 waypoint가 설정되었습니다.")
-        for i, wp in enumerate(self.waypoints):
-            self.get_logger().info(f"  Waypoint {i+1}: ({wp[0]:.3f}, {wp[1]:.3f})")
+        #for i, wp in enumerate(self.waypoints):
+        #    self.get_logger().info(f"  Waypoint {i+1}: ({wp[0]:.3f}, {wp[1]:.3f})")
         self.get_logger().info("📡 GPS 및 IMU 데이터 수신 후 자동으로 추적을 시작합니다...")
         self.get_logger().info("🎯 구간별 적응적 전방주시거리, 속도 기능이 활성화되었습니다.")
         self.get_logger().info(f"🔄 후진 구간 조향각 계수: {reverse_steering_gain}")
@@ -1289,9 +1363,21 @@ class UTMPurePursuit(Node):
                     twist = self.handle_waypoint_waiting()  # 대기 시작 후 즉시 대기 처리
                 else:
                     # 구간별 적응적 Pure Pursuit 제어 실행
-                    twist.linear.x, twist.angular.z, self.i = pure_pursuit(
+                    twist.linear.x, twist.angular.z, target_index = pure_pursuit(
                         self.x, self.y, self.yaw, self.path, self.i, current_segment
                     )
+                    
+                    # 타겟 index 변경 시 디버깅 로그 (self.i 업데이트 전에)
+                    if target_index != self.last_target_index:
+                        if current_segment is not None:
+                            seg_type = current_segment['type']
+                            seg_version = current_segment.get('version', 1)
+                            type_names = {'straight': '직선', 'curve': '곡선', 'reverse': '후진'}
+                            seg_type_name = type_names.get(seg_type, seg_type)
+                            self.get_logger().info(f"🎯 타겟 Index 변경: {target_index} (구간: {seg_type_name}{seg_version}, 좌표: ({self.path[target_index][0]:.3f}, {self.path[target_index][1]:.3f}))")
+                        else:
+                            self.get_logger().info(f"🎯 타겟 Index 변경: {target_index} (구간 정보 없음, 좌표: ({self.path[target_index][0]:.3f}, {self.path[target_index][1]:.3f}))")
+                        self.last_target_index = target_index
                     
                     # Path index 변경 시 디버깅 로그
                     if self.i != self.last_path_index:
@@ -1304,6 +1390,9 @@ class UTMPurePursuit(Node):
                         else:
                             self.get_logger().info(f"🎯 Path Index 변경: {self.i} (구간 정보 없음, 좌표: ({self.path[self.i][0]:.3f}, {self.path[self.i][1]:.3f}))")
                         self.last_path_index = self.i
+                    
+                    # self.i 업데이트
+                    self.i = target_index
 
             distance_to_path_end = math.hypot(
                 self.x - self.path[-1][0], 
