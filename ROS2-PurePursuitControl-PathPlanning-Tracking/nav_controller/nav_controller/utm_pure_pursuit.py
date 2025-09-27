@@ -25,8 +25,8 @@ lookahead_distance_s5 = 2.0  # 직선5 구간 전방주시거리 (미터) fast
 
 # 곡선 구간 (1-3)
 lookahead_distance_c1 = 0.5  # 곡선1 구간 전방주시거리 (미터) parking
-lookahead_distance_c2 = 1.5  # 곡선2 구간 전방주시거리 (미터) default
-lookahead_distance_c3 = 2.0  # 곡선3 구간 전방주시거리 (미터)
+lookahead_distance_c2 = 1.0  # 곡선2 구간 전방주시거리 (미터) default
+lookahead_distance_c3 = 1.5  # 곡선3 구간 전방주시거리 (미터)
 
 # 후진 구간 (1-2)
 lookahead_distance_r1 = 1.5  # 후진1 구간 전방주시거리 (미터) default
@@ -195,17 +195,11 @@ route_switch_config = {
     'stop_time': 2.0,      # 정지하여 샘플 수집 및 전환/재생성에 할당할 시간(초)
     'left_topic': '/lidar_obstacle_info_left',
     'right_topic': '/lidar_obstacle_info_right',
-    'waypoint_files': {
-        'ver1': '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver1.txt',
-        'ver2': '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver2.txt',
-        'ver3': '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver3.txt'
+     'waypoint_files': {
+         'ver1': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver1.txt',
+        'ver2': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver2.txt',
+         'ver3': '/home/jh/ros2_workspace/src/waypoints/full_wp_ver3.txt'
     }
-    # waypoint 파일 경로들은 파라미터에서 로드됨
-#     'waypoint_files': {
-#          'ver1': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver1.txt',  # 기본값
-#          'ver2': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver2.txt',  # 기본값
-#          'ver3': '/home/woong/our_ros2_ws/src/remapped_utmcoordinates_ver3.txt'   # 기본값
-#      }
 }
 
 def euler_from_quaternion(x, y, z, w):
@@ -489,14 +483,17 @@ class UTMPurePursuit(Node):
         self.x = 0.0
         self.y = 0.0
         self.yaw = 0.0
+        
+        # IMU 데이터 수신 상태 플래그 추가
+        self.imu_data_received = False
 
         # 현재 경로 버전 추적 (초기 파일명에서 유추 또는 기본 ver1)
         self.current_route_version = 'ver1'
 
         # Waypoint 파일 경로 파라미터 설정
-        self.declare_parameter('waypoint_ver1_path', '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver1.txt')
-        self.declare_parameter('waypoint_ver2_path', '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver2.txt')
-        self.declare_parameter('waypoint_ver3_path', '/home/woong/our_ros2_ws/src/waypoints/full_wp_ver3.txt')
+        self.declare_parameter('waypoint_ver1_path', '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver1.txt')
+        self.declare_parameter('waypoint_ver2_path', '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver2.txt')
+        self.declare_parameter('waypoint_ver3_path', '/home/jh/ros2_workspace/src/remapped_utmcoordinates_ver3.txt')
 
         # Waypoint 파일 경로: 파라미터에서 로드
         waypoint_files = {
@@ -520,7 +517,6 @@ class UTMPurePursuit(Node):
         self.current_segment_index = 0  # 현재 구간 인덱스
         self.last_segment_index = -1    # 마지막으로 로깅한 구간 인덱스
         self.last_path_index = -1       # 마지막으로 로깅한 path 인덱스
-        self.last_target_index = -1     # 마지막으로 로깅한 타겟 인덱스
         self.first_odometry_received = False  # 첫 번째 GPS 데이터 수신 여부
         self.global_path_generated = False  # 전체 경로 생성 완료 여부
         self.current_waypoint_index = 0  # 현재 waypoint 인덱스
@@ -607,8 +603,8 @@ class UTMPurePursuit(Node):
         self.get_logger().info("🚀 구간별 적응적 UTM Pure Pursuit 노드가 시작되었습니다!")
         self.get_logger().info(f"IMU 보정각도: {self.imu_calibration_angle:.6f} rad ({math.degrees(self.imu_calibration_angle):.2f}°)")
         self.get_logger().info(f"총 {len(self.waypoints)}개의 waypoint가 설정되었습니다.")
-        #for i, wp in enumerate(self.waypoints):
-        #    self.get_logger().info(f"  Waypoint {i+1}: ({wp[0]:.3f}, {wp[1]:.3f})")
+        for i, wp in enumerate(self.waypoints):
+            self.get_logger().info(f"  Waypoint {i+1}: ({wp[0]:.3f}, {wp[1]:.3f})")
         self.get_logger().info("📡 GPS 및 IMU 데이터 수신 후 자동으로 추적을 시작합니다...")
         self.get_logger().info("🎯 구간별 적응적 전방주시거리, 속도 기능이 활성화되었습니다.")
         self.get_logger().info(f"🔄 후진 구간 조향각 계수: {reverse_steering_gain}")
@@ -645,7 +641,7 @@ class UTMPurePursuit(Node):
         # 여러 경로에서 파일 찾기
         possible_paths = [
             "imu_calibration_angle.txt",  # 현재 디렉토리
-            "/home/woong/our_ros2_ws/src/imu_calibration_angle.txt",  # 절대 경로
+            "/home/jh/ros2_workspace/src/imu_calibration_angle.txt",  # 절대 경로
             os.path.join(os.path.dirname(__file__), "imu_calibration_angle.txt"),  # 스크립트 디렉토리
             os.path.join(os.getcwd(), "imu_calibration_angle.txt")  # 작업 디렉토리
         ]
@@ -1164,8 +1160,8 @@ class UTMPurePursuit(Node):
                                 self.get_logger().info(f"   시작 구간: {seg_name}{seg.get('version', 1)} (index {seg['start_index']}~{seg['end_index']})")
                         except Exception as e:
                             self.get_logger().warn(f"초기 시작 인덱스 계산 실패: {e}")
-                        self.flag = 2  # 바로 추적 시작
-                        self.get_logger().info("🎯 경로 추적을 시작합니다!")
+                        self.flag = 1  # GPS 수신 완료, IMU 대기 상태
+                        self.get_logger().info("📍 GPS 수신 완료! IMU 데이터 대기 중...")
                     else:
                         self.get_logger().error("경로 생성에 실패했습니다.")
         except Exception as e:
@@ -1205,8 +1201,11 @@ class UTMPurePursuit(Node):
             self.update_segment_index_from_path_index()
             self.current_route_version = version_key
             self.get_logger().info(f"✅ 경로 스위칭 완료 → {version_key} ({self.waypoints_file_path}) | 시작 i={self.i}")
-            # 주행 재개
-            self.flag = 2
+            # 주행 재개 (IMU 데이터 수신 확인 후)
+            if self.imu_data_received:
+                self.flag = 2
+            else:
+                self.flag = 1  # IMU 대기 상태
             return True
         except Exception as e:
             self.get_logger().error(f"경로 스위칭 중 오류: {e}")
@@ -1307,6 +1306,16 @@ class UTMPurePursuit(Node):
         
         # IMU 보정각도 적용
         self.yaw = (raw_yaw + self.imu_calibration_angle) % (2 * math.pi)
+        
+        # IMU 데이터 수신 완료 플래그 설정
+        if not self.imu_data_received:
+            self.imu_data_received = True
+            self.get_logger().info(f"🧭 IMU 데이터 수신 완료: yaw = {math.degrees(self.yaw):.1f}°")
+            
+            # GPS 데이터도 수신되었고 경로가 생성되었다면 flag = 2 설정
+            if self.first_odometry_received and self.global_path_generated and self.flag == 1:
+                self.flag = 2
+                self.get_logger().info("🎯 IMU + GPS 데이터 모두 수신 완료! 경로 추적을 시작합니다!")
     
     def timer_callback(self):
         """메인 제어 루프 (전체 경로 추적)"""
@@ -1363,21 +1372,9 @@ class UTMPurePursuit(Node):
                     twist = self.handle_waypoint_waiting()  # 대기 시작 후 즉시 대기 처리
                 else:
                     # 구간별 적응적 Pure Pursuit 제어 실행
-                    twist.linear.x, twist.angular.z, target_index = pure_pursuit(
+                    twist.linear.x, twist.angular.z, self.i = pure_pursuit(
                         self.x, self.y, self.yaw, self.path, self.i, current_segment
                     )
-                    
-                    # 타겟 index 변경 시 디버깅 로그 (self.i 업데이트 전에)
-                    if target_index != self.last_target_index:
-                        if current_segment is not None:
-                            seg_type = current_segment['type']
-                            seg_version = current_segment.get('version', 1)
-                            type_names = {'straight': '직선', 'curve': '곡선', 'reverse': '후진'}
-                            seg_type_name = type_names.get(seg_type, seg_type)
-                            self.get_logger().info(f"🎯 타겟 Index 변경: {target_index} (구간: {seg_type_name}{seg_version}, 좌표: ({self.path[target_index][0]:.3f}, {self.path[target_index][1]:.3f}))")
-                        else:
-                            self.get_logger().info(f"🎯 타겟 Index 변경: {target_index} (구간 정보 없음, 좌표: ({self.path[target_index][0]:.3f}, {self.path[target_index][1]:.3f}))")
-                        self.last_target_index = target_index
                     
                     # Path index 변경 시 디버깅 로그
                     if self.i != self.last_path_index:
@@ -1390,9 +1387,6 @@ class UTMPurePursuit(Node):
                         else:
                             self.get_logger().info(f"🎯 Path Index 변경: {self.i} (구간 정보 없음, 좌표: ({self.path[self.i][0]:.3f}, {self.path[self.i][1]:.3f}))")
                         self.last_path_index = self.i
-                    
-                    # self.i 업데이트
-                    self.i = target_index
 
             distance_to_path_end = math.hypot(
                 self.x - self.path[-1][0], 
