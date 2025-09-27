@@ -105,9 +105,9 @@ class MotionPlanningNode(Node):
         # 신호등 상태 필터링 로직
         self._update_filtered_traffic_light_state(msg.data)
 
-        # 신호등이 red로 인식되었을 때 추가 디버깅 로그
-        if self.filtered_traffic_light_state == "red":
-            self.get_logger().info("🚨 신호등 RED 감지!")
+        # 신호등이 red 또는 yellow로 인식되었을 때 추가 디버깅 로그
+        if self.filtered_traffic_light_state in ["red", "yellow"]:
+            self.get_logger().info(f"🚨 신호등 {self.filtered_traffic_light_state.upper()} 감지!")
 
     def lidar_callback(self, msg: Bool):
         self.lidar_data = msg
@@ -163,12 +163,12 @@ class MotionPlanningNode(Node):
             should_stop = True
             stop_reason = f"Waypoint {self.waypoint_zone_data} 구간에서 장애물 감지"
 
-        # 2. 신호등 정지점에서 빨간색 감지 (필터링된 상태 사용)
+        # 2. 신호등 정지점에서 빨간색 또는 노란색 감지 (필터링된 상태 사용)
         elif (self.waypoint_zone_data is not None and
-              self.filtered_traffic_light_state == "red" and
+              self.filtered_traffic_light_state in ["red", "yellow"] and
               self._is_at_traffic_light_stop_point(self.waypoint_zone_data)):
             should_stop = True
-            stop_reason = f"신호등 정지점에서 빨간색 감지 (waypoint: {self.waypoint_zone_data})"
+            stop_reason = f"신호등 정지점에서 {self.filtered_traffic_light_state} 감지 (waypoint: {self.waypoint_zone_data})"
 
         if should_stop:
             # 정지
