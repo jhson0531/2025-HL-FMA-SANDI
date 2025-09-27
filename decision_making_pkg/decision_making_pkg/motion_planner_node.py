@@ -60,24 +60,15 @@ class MotionPlanningNode(Node):
         self.none_counter = 0  # 연속 None 카운터
         self.none_threshold = self.declare_parameter('traffic_light_none_threshold', 33).value  # None으로 간주할 임계값
 
-        # waypoint 정지 구간 설정
-        self.stop_zone_start = self.declare_parameter('stop_zone_start', 346).value  # 정지 시작 waypoint
-        self.stop_zone_end = self.declare_parameter('stop_zone_end', 374).value     # 정지 끝 waypoint
+        # waypoint 정지 구간 설정     --- 이구간 변경 ---
+        self.stop_zone_start = self.declare_parameter('stop_zone_start', 573).value  # 정지 시작 waypoint
+        self.stop_zone_end = self.declare_parameter('stop_zone_end', 600).value     # 정지 끝 waypoint
 
-        # 신호등 구간 설정 (3개 구간)
-        self.traffic_light_zones = [
-            {
-                'start': self.declare_parameter('traffic_light_zone1_start', 100).value,
-                'end': self.declare_parameter('traffic_light_zone1_end', 150).value
-            },
-            {
-                'start': self.declare_parameter('traffic_light_zone2_start', 200).value,
-                'end': self.declare_parameter('traffic_light_zone2_end', 250).value
-            },
-            {
-                'start': self.declare_parameter('traffic_light_zone3_start', 300).value,
-                'end': self.declare_parameter('traffic_light_zone3_end', 350).value
-            }
+        # 신호등 정지 waypoint 설정 (특정 점에서만 멈춤)   --- 이구간 변경 ---
+        self.traffic_light_stop_waypoints = [
+            self.declare_parameter('traffic_light_stop_waypoint1', 141).value,  # 첫 번째 신호등 정지점
+            self.declare_parameter('traffic_light_stop_waypoint2', 281).value,  # 두 번째 신호등 정지점
+            self.declare_parameter('traffic_light_stop_waypoint3', 497).value   # 세 번째 신호등 정지점
         ]
 
         self.steering_command = 0.0
@@ -153,12 +144,9 @@ class MotionPlanningNode(Node):
                     self.get_logger().debug(f"Traffic light filtered to None (after {self.none_counter} consecutive None detections)")
             # 임계값 도달 전까지는 이전 상태 유지
 
-    def _is_in_traffic_light_zone(self, waypoint: int) -> bool:
-        """waypoint가 신호등 구간 중 하나에 속하는지 확인"""
-        for i, zone in enumerate(self.traffic_light_zones):
-            if zone['start'] <= waypoint <= zone['end']:
-                return True
-        return False
+    def _is_at_traffic_light_stop_point(self, waypoint: int) -> bool:
+        """waypoint가 신호등 정지점 중 하나인지 확인"""
+        return waypoint in self.traffic_light_stop_waypoints
         
     def timer_callback(self):
         # 디버깅용 로그 추가
@@ -175,12 +163,12 @@ class MotionPlanningNode(Node):
             should_stop = True
             stop_reason = f"Waypoint {self.waypoint_zone_data} 구간에서 장애물 감지"
 
-        # 2. 신호등 구간에서 빨간색 감지 (필터링된 상태 사용)
+        # 2. 신호등 정지점에서 빨간색 감지 (필터링된 상태 사용)
         elif (self.waypoint_zone_data is not None and
               self.filtered_traffic_light_state == "red" and
-              self._is_in_traffic_light_zone(self.waypoint_zone_data)):
+              self._is_at_traffic_light_stop_point(self.waypoint_zone_data)):
             should_stop = True
-            stop_reason = f"신호등 구간에서 빨간색 감지 (waypoint: {self.waypoint_zone_data})"
+            stop_reason = f"신호등 정지점에서 빨간색 감지 (waypoint: {self.waypoint_zone_data})"
 
         if should_stop:
             # 정지
